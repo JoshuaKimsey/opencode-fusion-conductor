@@ -4,6 +4,7 @@ mode: subagent
 permission:
   edit: allow
   external_directory: deny
+  skill: allow
   bash:
     "*": allow
     "git commit*": deny

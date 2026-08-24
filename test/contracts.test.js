@@ -487,6 +487,23 @@ describe('agent frontmatter contracts', () => {
     assertPermissionValue('design', 'external_directory', 'deny');
   });
 
+  // design is the one role whose prompt cannot do its job without a skill, and
+  // it already holds edit + full bash, so auto-approving a locally installed
+  // markdown file adds no capability it lacks. Every other role keeps opencode's
+  // default, so a global skill deny still reaches them.
+  test('design can load the installed skill its prompt requires', () => {
+    assertPermissionValue('design', 'skill', 'allow');
+    for (const role of Object.keys(agents).filter((r) => r !== 'design')) {
+      const perm = findNamedBlock(agents[role].frontmatter, 'permission');
+      const child = perm?.children.find((c) => c.key === 'skill');
+      assert.equal(
+        child,
+        undefined,
+        `contract violated: ${role} must not grant the skill permission - only design's prompt requires one`
+      );
+    }
+  });
+
   test('design has edit allow and the destructive-command denylist', () => {
     assertPermissionValue('design', 'edit', 'allow');
     const bash = requireBlock(agents.design.frontmatter, 'bash', 'design');
@@ -606,6 +623,14 @@ describe('build.md body preservation contracts', () => {
     assert.ok(
       bodyHasAny(body, ['exact', 'verbatim', 'replacement text']),
       'contract violated: build.md must still require an exact/verbatim dictated patch'
+    );
+  });
+
+  test('a failed sidekick task resumes the same opencode session', () => {
+    assert.ok(lower.includes('task_id'), 'contract violated: build.md must preserve resumable task IDs');
+    assert.ok(
+      bodyHasAny(body, ['resume that task', 'resume the task', 'reuse the task']),
+      'contract violated: build.md must reuse a failed task instead of starting a fresh subagent'
     );
   });
 
@@ -749,6 +774,73 @@ describe('chaining explanation contract', () => {
       assert.ok(
         bodyHasAny(text, ['consumer', 'pipe']),
         `contract violated: agent/${name}.md must keep the pipe case, which is the denial the agents actually hit`
+      );
+    }
+  });
+});
+
+// build and plan run the most expensive model on the team, so a whole-repo diff
+// or a `git log -p` sweep lands in the costliest context there is and stays for
+// the rest of the session. The prompt bullet is the advice half; the patch
+// denies are the mechanical half AGENTS.md requires. Verified against opencode
+// 1.18.21: the built-in explore is defined with bash "allow", so it can run git
+// itself - history digs belong there, not with the edit-capable sidekick.
+describe('git output discipline contract', () => {
+  for (const role of ['build', 'plan']) {
+    test(`${role}.md keeps large git output out of the main context`, () => {
+      const text = agents[role].body;
+      assert.ok(
+        bodyHasAny(text, ['git diff HEAD --stat']),
+        `contract violated: agent/${role}.md must start diff review from git diff HEAD --stat`
+      );
+      assert.ok(
+        bodyHasAny(text, ['git diff HEAD -- <path>', 'git diff HEAD --']),
+        `contract violated: agent/${role}.md must scope the full diff to specific paths`
+      );
+    });
+
+    test(`${role} denies patch-producing git log while keeping plain git log`, () => {
+      const bash = requireBlock(agents[role].frontmatter, 'bash', role);
+      for (const command of [
+        'git log -p',
+        'git log -u',
+        'git log --patch',
+        'git log --oneline -p',
+        'git log main..HEAD --patch',
+      ]) {
+        assert.equal(
+          resolveBashRule(bash, command),
+          'deny',
+          `contract violated: ${role} must deny patch-producing git log form: ${command}`
+        );
+      }
+      for (const command of ['git log --oneline -20', 'git log --pretty=short', 'git log --stat']) {
+        assert.equal(
+          resolveBashRule(bash, command),
+          'allow',
+          `contract violated: ${role} must still allow non-patch git log form: ${command}`
+        );
+      }
+    });
+  }
+
+  test('build.md routes git history to explore, not to the sidekick', () => {
+    const body = agents.build.body;
+    assert.ok(
+      bodyHasAny(body, ['git blame', 'buried in history', 'which commit introduced']),
+      'contract violated: build.md must still name history investigation as delegated work'
+    );
+    const exploreSection = body.slice(body.indexOf('**explore**'), body.indexOf('**research**'));
+    assert.ok(
+      bodyHasAny(exploreSection, ['history']),
+      'contract violated: history investigation must be routed to explore, which is read-only and cheap'
+    );
+    // opencode 1.18.21 defines explore with bash "allow". A prompt claiming
+    // otherwise sends read-only work to an edit-capable agent on a pricier model.
+    for (const claim of ['may not run git', 'cannot run git', 'explore has no bash', 'history spelunking']) {
+      assert.ok(
+        !bodyHasAny(body, [claim]),
+        `contract violated: build.md restates the disproven claim that explore cannot run git ("${claim}")`
       );
     }
   });

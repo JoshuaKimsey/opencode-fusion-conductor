@@ -10,6 +10,27 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Git history investigation now routes to `explore`, which is read-only and runs
+  on the cheapest model in the team. The `build` and `plan` agents start from
+  `git diff HEAD --stat` and then diff only the paths that matter, so a
+  whole-repo diff no longer occupies the heavy model's context. Both allowlists
+  now deny the patch-producing `git log` forms (`-p`, `-u`, `--patch`) outright;
+  the scoped-diff habit stays advice, since no pattern can separate a whole-repo
+  `git diff` from a useful one. The `HEAD` forms are deliberate - a bare
+  `git diff` reports nothing once an executor has staged its work. Commits and
+  pushes remain with the main agent.
+- The build agent is now instructed to resume a failed subagent by passing the
+  `task_id` from opencode's error text back to the `task` tool, preserving that
+  session's context instead of paying for a fresh attempt. This uses the
+  resumable task errors shipped in opencode 1.18.20. Only a subagent *failure*
+  carries an id; a task that returns a wrong diff has none, and an id opencode
+  no longer recognizes starts a fresh subagent without reporting it.
+- The `design` agent now explicitly allows the `skill` tool that its prompt
+  requires, so a global skill deny cannot silently disable its design-skill
+  selection. This also means design loads installed skills without a per-use
+  approval prompt; the threat-model section of the README covers what that does
+  and does not imply. No other agent grants the permission, so a global deny
+  still reaches them - including the `build` agent that runs the setup skill.
 - The generic model table now recommends DeepSeek V4 Flash instead of Grok 4.5
   for the fast, read-only `explore` role. Grok 4.5 remains the suggested
   `sidekick`: implementation quality matters more there because it owns edits
