@@ -1,5 +1,12 @@
 # opencode-fusion
 
+> [!IMPORTANT]
+> **This project is no longer actively maintained.** The final maintained
+> release is v1.2.0 and targets OpenCode 1.18.x. OpenCode 2 is not supported
+> because its permission translation does not preserve Fusion's mechanical
+> guarantees. Existing releases remain available; forks and new maintainers
+> are welcome.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A minimal, working multi-model team for [opencode](https://opencode.ai): a **main agent** that plans and reviews but **cannot edit files**, delegating every change to a cheaper, faster **sidekick**. Inspired by the [Devin Fusion "sidekick" pattern](https://cognition.com/blog/devin-fusion) from Cognition.
@@ -30,7 +37,7 @@ set up fusion
 
 The installer needs **Node 20.12 or newer**. On older Node (including Ubuntu's apt default) it crashes with a `styleText` error; [Troubleshooting](#troubleshooting) has three workarounds. The skill interviews you for a model per role, writes the global config, installs the agent prompts, and tells you when to restart. On a subscription (OpenCode Go/Zen, ChatGPT, or GitHub Copilot)? Name it and the skill starts from a ready-made [profile](#subscription-profiles) instead of asking per role. Manual setup and provider examples live in [Setup](#setup).
 
-That command tracks `main`. To install an exact release instead, add the tag: `npx skills add mihneaptu/opencode-fusion#v1.1.0 --skill fusion-setup -g -a opencode -y`. Released versions are listed on the [changelog](https://mihneaptu.github.io/opencode-fusion/changelog.html).
+That command tracks `main`. To install an exact release instead, add the tag: `npx skills add mihneaptu/opencode-fusion#v1.2.0 --skill fusion-setup -g -a opencode -y`. Released versions are listed on the [changelog](https://mihneaptu.github.io/opencode-fusion/changelog.html).
 
 ## Why it works
 
@@ -343,10 +350,11 @@ This does not weaken the split: switching primaries is a keybind you press, not 
 - **No dynamic mid-session routing.** Devin Fusion's second technique, swapping the active model mid-task during context compaction, needs Devin's closed product surface and is not possible in opencode. This repo implements the sidekick pattern only; model assignments are fixed per role at startup. It is an explicit non-goal, not a missing feature.
 - **Config loads at startup.** opencode reads config once when it launches. Any change to `opencode.json` or an agent prompt requires a full restart to take effect.
 - **Loop protection has two layers.** `subagent_depth: 2` caps Fusion at the required main -> executor -> read-only helper chain. The `task` permission graph independently controls which named agents each role may launch, so allowing the second level does not expose arbitrary subagents.
-- **Targets opencode 1.x.** These files are written against opencode's stable 1.x config schema (verified on 1.18.x). The [opencode 2.0 beta](https://opencode.ai/v2/docs) (`opencode2`) has its own native schema (plural `agents`, array-based `permissions`), but it reads the same config locations and [translates v1-shaped configuration in memory](https://opencode.ai/v2/docs/migrate-v1) without rewriting the file. So the Fusion config and agent prompts are expected to load under `opencode2` unconverted, and opencode treats a v1 file that stops working as a beta compatibility bug. Three things are genuinely not carried over:
-  - **The optional plugins will not work.** The plugin API is one of v2's three intentional breaking changes, and the docs are explicit that V1 plugins do not run in V2. `fusion-audit` and `fusion-claude` are V1 plugins, so the delegation log, the token accounting, and the Claude bridge are unavailable there until they are ported. Nothing enforced depends on them.
-  - **Three top-level keys have no native v2 equivalent:** `small_model` (v2 picks its own maintenance models), `enabled_providers`, and `subagent_depth`. v2 bounds delegation depth with per-agent `subagent` deny rules instead of a global number.
-  - **Subagents do not inherit the parent's permissions.** v2 states that a custom subagent runs with its own permissions rather than a subset derived from its caller. Every Fusion role with a prompt file sets its own permissions explicitly, so this changes nothing here; `explore` is opencode's built-in and carries whatever read-only policy your version ships. It matters if you hand-roll a narrower executor and expect it to inherit a caller's limits.
+- **Targets OpenCode 1.18.x only.** The final maintained release was verified
+  against OpenCode 1.18.x. OpenCode 2 is not supported: its beta compatibility
+  translation exposed a denied `edit` tool to the plan agent, so Fusion's
+  mechanical permission guarantee does not hold. Do not use this bundle with
+  OpenCode 2.
 
 ## FAQ
 

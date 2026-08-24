@@ -19,7 +19,7 @@ const MANIFEST_VERSION = 2;
 // that selects a subset of roles leaves the rest untouched. The bundle ships
 // standalone, so it cannot read the repo's package.json at runtime; a contract
 // test keeps the two in sync instead.
-const BUNDLE_VERSION = '1.1.0';
+const BUNDLE_VERSION = '1.2.0';
 const CORE_ROLES = ['build', 'plan', 'sidekick'];
 const OPTIONAL_ROLES = ['research', 'design', 'reviewer', 'vision'];
 const ALL_ROLES = [...CORE_ROLES, ...OPTIONAL_ROLES];

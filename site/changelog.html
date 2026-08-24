@@ -117,7 +117,7 @@
              changelog, then run `npm run build:changelog`. -->
         <nav class="docs-toc-nav docs-toc-nav-releases">
           <!-- generated:toc:start -->
-          <a href="#unreleased">Unreleased<span class="docs-toc-date">in progress</span></a>
+          <a href="#v1-2-0">1.2.0<span class="docs-toc-date">Aug 24, 2026</span></a>
           <a href="#v1-1-0">1.1.0<span class="docs-toc-date">Jul 28, 2026</span></a>
           <a href="#v1-0-0">1.0.0</a>
           <!-- generated:toc:end -->
@@ -136,14 +136,16 @@
         </header>
 
         <!-- generated:releases:start -->
-        <section id="unreleased" class="docs-section release">
+        <section id="v1-2-0" class="docs-section release">
           <div class="release-head">
-            <h2 class="release-version">Unreleased</h2>
-            <span class="pill release-tag">In progress</span>
+            <h2 class="release-version">1.2.0</h2>
+            <time class="release-date" datetime="2026-08-24">August 24, 2026</time>
+            <span class="pill pill-main release-tag">Latest</span>
           </div>
           <div class="release-group">
             <h3 class="release-group-label" data-kind="changed">Changed</h3>
             <ul class="docs-list release-items">
+              <li>This is the final actively maintained release. The README now limits support to OpenCode 1.18.x and invites forks and new maintainers. The advisory OpenCode 2 beta CI lane was removed after the beta exposed <code>edit</code> to the plan agent, violating Fusion’s core permission guarantee.</li>
               <li>Git history investigation now routes to <code>explore</code>, which is read-only and runs on the cheapest model in the team. The <code>build</code> and <code>plan</code> agents start from <code>git diff HEAD --stat</code> and then diff only the paths that matter, so a whole-repo diff no longer occupies the heavy model’s context. Both allowlists now deny the patch-producing <code>git log</code> forms (<code>-p</code>, <code>-u</code>, <code>--patch</code>) outright; the scoped-diff habit stays advice, since no pattern can separate a whole-repo <code>git diff</code> from a useful one. The <code>HEAD</code> forms are deliberate - a bare <code>git diff</code> reports nothing once an executor has staged its work. Commits and pushes remain with the main agent.</li>
               <li>The build agent is now instructed to resume a failed subagent by passing the <code>task_id</code> from opencode’s error text back to the <code>task</code> tool, preserving that session’s context instead of paying for a fresh attempt. This uses the resumable task errors shipped in opencode 1.18.20. Only a subagent <em>failure</em> carries an id; a task that returns a wrong diff has none, and an id opencode no longer recognizes starts a fresh subagent without reporting it.</li>
               <li>The <code>design</code> agent now explicitly allows the <code>skill</code> tool that its prompt requires, so a global skill deny cannot silently disable its design-skill selection. This also means design loads installed skills without a per-use approval prompt; the threat-model section of the README covers what that does and does not imply. No other agent grants the permission, so a global deny still reaches them - including the <code>build</code> agent that runs the setup skill.</li>
@@ -157,7 +159,6 @@
           <div class="release-head">
             <h2 class="release-version">1.1.0</h2>
             <time class="release-date" datetime="2026-07-28">July 28, 2026</time>
-            <span class="pill pill-main release-tag">Latest</span>
           </div>
           <div class="release-group">
             <h3 class="release-group-label" data-kind="added">Added</h3>

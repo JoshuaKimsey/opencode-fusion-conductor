@@ -6,10 +6,14 @@ installed copy can be traced back to the release that applied it.
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 1.2.0 - 2026-08-24
 
 ### Changed
 
+- This is the final actively maintained release. The README now limits support
+  to OpenCode 1.18.x and invites forks and new maintainers. The advisory
+  OpenCode 2 beta CI lane was removed after the beta exposed `edit` to the plan
+  agent, violating Fusion's core permission guarantee.
 - Git history investigation now routes to `explore`, which is read-only and runs
   on the cheapest model in the team. The `build` and `plan` agents start from
   `git diff HEAD --stat` and then diff only the paths that matter, so a

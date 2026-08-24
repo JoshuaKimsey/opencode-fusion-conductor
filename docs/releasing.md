@@ -16,8 +16,8 @@ hidden.
 To install an exact version, append a ref. Both forms resolve the tag:
 
 ```
-npx skills add mihneaptu/opencode-fusion#v1.1.0 --skill fusion-setup -g -a opencode -y
-npx skills add https://github.com/mihneaptu/opencode-fusion/tree/v1.1.0 --skill fusion-setup -g -a opencode -y
+npx skills add mihneaptu/opencode-fusion#v1.2.0 --skill fusion-setup -g -a opencode -y
+npx skills add https://github.com/mihneaptu/opencode-fusion/tree/v1.2.0 --skill fusion-setup -g -a opencode -y
 ```
 
 ## Per-pull-request duty
