@@ -1,55 +1,55 @@
-# opencode Fusion
+# opencode Conductor
 
-> A main agent that plans and reviews without editing files, and a cheaper sidekick that executes. Built for OpenCode with mechanical edit deny at the permission layer. Inspired by Cognition’s Devin Fusion pattern. Independent project — not affiliated with Cognition, Devin, or OpenCode.
+> A main agent that plans and reviews without editing files, and a cheaper sidekick that executes. A one-line opencode plugin with mechanical edit deny at the permission layer. Inspired by Cognition's Devin Fusion pattern. Forked from opencode-fusion. Independent project - not affiliated with Cognition, Devin, or OpenCode.
 
-opencode Fusion is a *configuration* project (not an app). Install on OpenCode, then let the main agent delegate edits to the sidekick.
+opencode Conductor is an *opencode plugin* (not an app). Install it by adding one line to `opencode.json`, restart opencode, and the main agent delegates edits to the sidekick.
 
 ## Docs
 
 - [Landing page](index.html): product overview, how it works, cost split
-- [Full docs](docs.html): install, verify, customize, troubleshoot
+- [Full docs](docs.html): install, verify, customize, migrate, troubleshoot
 - [Changelog](changelog.html): per-release notes, rendered from CHANGELOG.md (canonical)
-- [Install OpenCode](docs.html#install-opencode)
+- [Install](docs.html#install-opencode): the one-line plugin install and the /conductor command
 - [Subscription profiles](docs.html#profiles): named per-subscription model presets (OpenCode Go/Zen, ChatGPT, GitHub Copilot)
 - [Verify the flow](docs.html#verify)
 - [Enforced vs. advised](docs.html#guarantees)
 - [Customize models](docs.html#customize)
+- [Migration from fusion](docs.html#migration)
 - [Troubleshooting](docs.html#troubleshooting)
 - [Limitations](docs.html#limitations)
 - [FAQ](docs.html#faq)
 
 ## Quick install
 
-### OpenCode
+Add one line to your opencode config (`~/.config/opencode/opencode.json`, or a project-level `opencode.json`):
 
-```bash
-npx skills add mihneaptu/opencode-fusion --skill fusion-setup -g -a opencode -y
+```json
+{
+  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]]
+}
 ```
 
-The installer needs Node 20.12+; on older Node (e.g. Ubuntu's apt default 18.x) it crashes with a `styleText` SyntaxError — upgrade Node, pin `npx skills@1.5.15 add …`, or use the offline fallback below.
+Then fully quit and restart opencode. opencode auto-installs npm plugins via Bun at startup, so there is no skill, no installer, and no interview. The plugin injects the agent team and the `/conductor` command on the next launch. Uninstall by removing the line and restarting.
 
-Then say `set up fusion` (or run `/fusion-setup`) — skills are discovered on demand, no restart needed to pick one up. The skill writes global config under `~/.config/opencode/` and installs agent prompts; restart OpenCode after it finishes, because config loads at startup.
-
-Offline fallback from a clone:
-
-```bash
-cp -r .opencode/skills/fusion-setup ~/.config/opencode/skills/
-```
+Coming from opencode-fusion? Say `undo fusion` with the old fusion-setup skill first to remove the file-based install, then add the plugin line. `/conductor` warns if leftover fusion files are detected.
 
 ## Repo
 
-- [GitHub](https://github.com/mihneaptu/opencode-fusion)
-- [README](https://github.com/mihneaptu/opencode-fusion#readme) — canonical reference; this site is the short version. Prefer the README when the two differ.
+- [GitHub](https://github.com/JoshuaKimsey/opencode-conductor)
+- [README](https://github.com/JoshuaKimsey/opencode-conductor#readme) — canonical reference; this site is the short version. Prefer the README when the two differ.
+- [opencode-fusion](https://github.com/mihneaptu/opencode-fusion) — the archived upstream fork
 
 ## Core ideas for agents helping users
 
-1. Main (`build`) plans, delegates, and reviews — it must not edit files.
-2. Sidekick executes precise specs; explore/research are read-only helpers.
-3. OpenCode enforces this with permission frontmatter (edit deny + task graph). Denied tools are removed from the model's tool schema, so "won't delegate" means visible inaction, never a silent bypass.
-4. Config and agent prompts load at startup — restart after changing them. Skills are discovered on demand; installing one needs no restart.
+1. Main (`build`) plans, delegates, and reviews — it must not edit files. `plan` is the plan-mode primary; `sidekick` executes edits and commands.
+2. Sidekick executes precise specs; explore/research/design/reviewer/vision are the other injected roles. `explore` is opencode's built-in read-only agent, model-only. `subagent_depth` is floored to 2.
+3. OpenCode enforces this with permission maps injected by the plugin (edit deny + task graph). Denied tools are removed from the model's tool schema, so "won't delegate" means visible inaction, never a silent bypass.
+4. Config loads at startup — restart after changing plugin options. On opencode 1.18.x the agent registry is materialized at startup, so model changes require a restart (a platform limitation).
 5. Cross-vendor review is emergent: pick main and sidekick from different model families.
-6. Only the permission layer is enforced; prompts and skills are advisory. Ignoring them costs quality or tokens, never an unauthorized edit. Skills load at the model's discretion, so nothing load-bearing lives in one — the bundled skill is just the installer.
+6. Only the permission layer is enforced; prompts are advisory. Ignoring them costs quality or tokens, never an unauthorized edit.
 7. If the sidekick misses a spec twice, the main agent dictates the exact patch verbatim (file, line range, code) for the sidekick to apply — the retry loop cannot deadlock. If the dictated patch fails verification, the plan is wrong and main revises it.
 8. Provider API keys belong in environment variables: opencode.json supports `{env:VAR}` and `{file:path}` substitution, so a key never sits in plaintext config or passes through the chat. An unset variable resolves to an empty string, which surfaces as auth errors.
-9. The optional `/fusion-status` command health-checks the setup in one shot: live enforcement in the running session (denied tools actually absent from the tool schema), the config on disk, and the installed agent files. It only reports — run it first when troubleshooting.
-10. Bundled subscription profiles (`opencode-go`, `opencode-zen`, `opencode-zen-free`, `chatgpt`, `github-copilot`) are plain config fragments the deterministic installer applies via `--profile <name>`; an optional `--config` fragment overrides them key by key. Provider auth stays out-of-band via `opencode auth login` — profiles never contain keys. There is deliberately no Claude Pro/Max profile: Anthropic prohibits subscription use outside Claude Code — Claude models come via `opencode-zen` or an Anthropic API key instead.
+9. The `/conductor` slash command reports or edits the plugin's own options: `/conductor` with no args runs `conductor_status` (read-only report including leftover fusion-install hazards); with args it runs `conductor_configure` (role=model pairs, `profile <name>`, or `audit=true`/`claude=true` flags), writing a backup at `opencode.json.conductor-backup` and telling you to restart.
+10. Bundled subscription profiles (`opencode-go`, `opencode-zen`, `opencode-zen-free`, `chatgpt`, `github-copilot`) are applied via the `profile` option; the `models` option overrides per role. Provider auth stays out-of-band via `opencode auth login` — profiles never contain keys.
+11. The `audit` option (boolean, off by default) enables a hook that logs the delegation tree and per-agent token usage. The `claude` option (boolean, off by default) enables the Claude Code bridge tools `conductor_claude_status`/`conductor_claude_review`, which require the Claude Pro/Max CLI installed and authenticated.
+12. Targets opencode 1.18.x. OpenCode 2 (beta) is not supported: its plugin API differs and permission enforcement is call-time rather than schema-removal. A v2 port is planned. Known upstream flake: anomalyco/opencode#30955 (rare config-hook/agent-registry race on first delegation; retry resolves it).

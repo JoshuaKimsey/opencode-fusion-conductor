@@ -1,12 +1,13 @@
-// Optional Claude Pro/Max reviewer for Fusion.
-// This plugin uses the official Claude Code CLI and its own first-party login.
+// Optional first-party Claude Pro/Max reviewer for Conductor.
+// Ported from the fusion-claude plugin (a guarded bridge that invokes the
+// official Claude Code CLI for plan review). Converts the plugin's exported
+// factory (server(input, options) => { tool }) into a tool-factory function
+// `claudeTools(options)` that src/index.js wires only when the user opts in
+// via { claude: true }.
+//
+// This bridge uses the official Claude Code CLI and its own first-party login.
 // Authentication stays inside Claude Code; the plugin never opens its
 // credential store or extracts an OAuth token.
-//
-// opencode's plugin loader invokes EVERY top-level export as a plugin factory
-// and rejects non-function exports, so FusionClaude must stay the only export.
-// The loader calls it as server(input, options); tests inject a fake process
-// runner and environment through that second argument.
 
 import { spawn } from "node:child_process";
 import os from "node:os";
@@ -25,8 +26,8 @@ const AUTH_TIMEOUT_MS = 20_000;
 const REVIEW_TIMEOUT_MS = 600_000;
 const OUTPUT_LIMIT = 2 * 1024 * 1024;
 const KILL_GRACE_MS = 5_000;
-// Mirrors the permission contract (global "fusion_claude_*": "deny", build and
-// plan opt back in). Enforced here as well because opencode's default
+// Mirrors the permission contract (global "conductor_claude_*": "deny", build
+// and plan opt back in). Enforced here as well because opencode's default
 // permission is "*": "allow": a hand-copied plugin without the installer's
 // global deny would otherwise serve every agent.
 const ALLOWED_AGENTS = new Set(["build", "plan"]);
@@ -257,7 +258,7 @@ function parseJson(stdout, label) {
   return parsed;
 }
 
-function requireFusionCaller(context) {
+function requireConductorCaller(context) {
   const agent = context?.agent;
   if (!ALLOWED_AGENTS.has(agent)) {
     throw new Error(`The Claude bridge tools only serve the build and plan agents (caller: ${agent ?? "unknown"}).`);
@@ -335,27 +336,28 @@ function reviewArgs(model, effort) {
   ];
 }
 
-function createClaudeTools({ run = runClaudeProcess, environment = process.env, timeouts } = {}) {
+export function claudeTools(options = {}) {
+  const { run = runClaudeProcess, environment = process.env, timeouts } = options;
   const safeEnvironment = cleanEnvironment(environment);
-  // Timeout overrides exist only for test injection through the loader's
+  // Timeout overrides exist only for test injection through the plugin's
   // options argument, mirroring how `run` and `environment` are injected;
   // production always uses the constants above.
   const authMs = timeouts?.authMs ?? AUTH_TIMEOUT_MS;
   const reviewMs = timeouts?.reviewMs ?? REVIEW_TIMEOUT_MS;
 
   return {
-    fusion_claude_status: tool({
+    conductor_claude_status: tool({
       description: "Check whether the optional first-party Claude Pro/Max review bridge is ready. Returns no account identity or credential data.",
       args: {},
       async execute(_args, context) {
-        requireFusionCaller(context);
+        requireConductorCaller(context);
         requireNotCanceled(context);
         const subscription = await requireFirstPartySubscription(run, safeEnvironment, context?.abort, authMs);
         return `Claude Code bridge ready: ${subscription.toUpperCase()} subscription, ${DEFAULT_MODEL}, effort ${DEFAULT_EFFORT}.`;
       },
     }),
 
-    fusion_claude_review: tool({
+    conductor_claude_review: tool({
       description: "Ask Claude Code for a stateless, read-only critique of a self-contained implementation plan or diff. Claude cannot inspect files or make changes.",
       args: {
         packet: tool.schema.string().max(INPUT_LIMIT).describe("The task, relevant context, proposed plan or diff, risks, and verification steps to review."),
@@ -363,7 +365,7 @@ function createClaudeTools({ run = runClaudeProcess, environment = process.env, 
         effort: tool.schema.string().max(16).describe(`Optional reasoning effort: low, medium, high, xhigh, or max (default ${DEFAULT_EFFORT}).`).optional(),
       },
       async execute({ packet, model, effort }, context) {
-        requireFusionCaller(context);
+        requireConductorCaller(context);
         requireNotCanceled(context);
         const choice = resolveModelChoice(model, effort);
         await requireFirstPartySubscription(run, safeEnvironment, context?.abort, authMs);
@@ -405,5 +407,3 @@ function createClaudeTools({ run = runClaudeProcess, environment = process.env, 
     }),
   };
 }
-
-export const FusionClaude = async (_input, options) => ({ tool: createClaudeTools(options) });

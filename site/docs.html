@@ -6,16 +6,16 @@
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#fbfbfd" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
-  <meta name="description" content="opencode Fusion docs: install for OpenCode, verify the flow, customize models, and troubleshoot.">
-  <title>Docs — opencode Fusion</title>
+  <meta name="description" content="opencode Conductor docs: install the one-line plugin for OpenCode, verify the flow, customize models, and troubleshoot.">
+  <title>Docs — opencode Conductor</title>
   <link rel="alternate" type="text/markdown" title="LLM-friendly docs" href="llms.txt">
-  <link rel="canonical" href="https://mihneaptu.github.io/opencode-fusion/docs.html">
+  <link rel="canonical" href="https://joshuakimsey.github.io/opencode-conductor/docs.html">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="opencode Fusion">
-  <meta property="og:url" content="https://mihneaptu.github.io/opencode-fusion/docs.html">
-  <meta property="og:title" content="Docs — opencode Fusion">
-  <meta property="og:description" content="opencode Fusion docs: install for OpenCode, verify the flow, customize models, and troubleshoot.">
-  <meta property="og:image" content="https://mihneaptu.github.io/opencode-fusion/assets/hero-poster.jpg">
+  <meta property="og:site_name" content="opencode Conductor">
+  <meta property="og:url" content="https://joshuakimsey.github.io/opencode-conductor/docs.html">
+  <meta property="og:title" content="Docs — opencode Conductor">
+  <meta property="og:description" content="opencode Conductor docs: install the one-line plugin for OpenCode, verify the flow, customize models, and troubleshoot.">
+  <meta property="og:image" content="https://joshuakimsey.github.io/opencode-conductor/assets/hero-poster.jpg">
   <meta property="og:image:width" content="1280">
   <meta property="og:image:height" content="720">
   <meta property="og:image:alt" content="Abstract hero art: a blue and an amber gradient glow on a light background">
@@ -40,7 +40,7 @@
         "name": "What if agents ignore the prompts or never load the skills?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "You lose quality, not guarantees. Delegation is not a behavior the main agent chooses: its edit and search tools are removed from its tool schema, so handing work to the sidekick is the only path to changing a file. The fusion-audit plugin and OpenCode’s session DB record what every agent actually did."
+          "text": "You lose quality, not guarantees. Delegation is not a behavior the main agent chooses: its edit and search tools are removed from its tool schema, so handing work to the sidekick is the only path to changing a file. The optional conductor-audit hook and OpenCode’s session DB record what every agent actually did."
         }
       },
       {
@@ -48,7 +48,7 @@
         "name": "How is this different from superpowers or other orchestration?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Different layer. Skill libraries like superpowers teach agents how to work — process knowledge the model can still ignore. Fusion configures what agents can do at the permission layer, and adds per-role model routing for cost with cross-vendor review as a side effect. No framework, no code — just configuration on a normal session. The two compose: superpowers supports OpenCode, so its skills can run inside a Fusion setup."
+          "text": "Different layer. Skill libraries like superpowers teach agents how to work — process knowledge the model can still ignore. Conductor configures what agents can do at the permission layer, and adds per-role model routing for cost with cross-vendor review as a side effect. No framework, no code — just a one-line plugin on a normal session. The two compose: superpowers supports OpenCode, so its skills can run inside a Conductor setup."
         }
       }
     ]
@@ -77,7 +77,7 @@
 
   <header class="site-header" id="top">
     <div class="container header-inner">
-      <a class="wordmark header-pill" href="index.html" aria-label="opencode Fusion home">
+      <a class="wordmark header-pill" href="index.html" aria-label="opencode Conductor home">
         <span class="wordmark-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <defs>
@@ -94,7 +94,7 @@
             </g>
           </svg>
         </span>
-        <span class="wordmark-text">opencode<span class="wordmark-accent">Fusion</span></span>
+        <span class="wordmark-text">opencode<span class="wordmark-accent">Conductor</span></span>
       </a>
 
       <div class="header-cluster header-pill">
@@ -106,7 +106,7 @@
             <li><a href="changelog.html">Changelog</a></li>
           </ul>
           <a class="btn btn-primary btn-sm" href="index.html#get-started">Get started</a>
-          <a class="gh-btn" href="https://github.com/mihneaptu/opencode-fusion" target="_blank" rel="noopener noreferrer" aria-label="Star opencode-fusion on GitHub">
+          <a class="gh-btn" href="https://github.com/JoshuaKimsey/opencode-conductor" target="_blank" rel="noopener noreferrer" aria-label="Star opencode-conductor on GitHub">
             <svg class="gh-btn-mark" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
             <span class="gh-btn-count" data-gh-stars>GitHub</span>
             <svg class="gh-btn-star" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.1l2.05 4.15 4.58.67-3.31 3.23.78 4.56L8 11.56l-4.1 2.15.78-4.56-3.31-3.23 4.58-.67L8 1.1Z"/></svg>
@@ -154,6 +154,7 @@
           <a href="#profiles">Profiles</a>
           <a href="#verify">Verify</a>
           <a href="#customize">Customize</a>
+          <a href="#migration">Migration from fusion</a>
           <a href="#troubleshooting">Troubleshooting</a>
           <a href="#limitations">Limitations</a>
           <a href="#faq">FAQ</a>
@@ -163,25 +164,25 @@
       <article class="docs-article">
         <header class="docs-hero">
           <p class="docs-kicker">Documentation</p>
-          <h1 class="docs-title">opencode Fusion</h1>
+          <h1 class="docs-title">opencode Conductor</h1>
           <p class="docs-lead">Main agent plans and reviews. Sidekick edits. Install, verify, and customize the pattern on OpenCode.</p>
         </header>
 
         <section id="overview" class="docs-section">
           <h2>Overview</h2>
-          <p>opencode Fusion is a configuration project, not an app. It implements the <a href="https://cognition.com/blog/devin-fusion" target="_blank" rel="noopener noreferrer">Devin Fusion sidekick pattern</a>: a main agent that plans and reviews but cannot edit files, and a cheaper sidekick that executes every change.</p>
+          <p>opencode Conductor is an <a href="https://opencode.ai/docs/plugins/" target="_blank" rel="noopener noreferrer">opencode plugin</a>, not an app. It implements the <a href="https://cognition.com/blog/devin-fusion" target="_blank" rel="noopener noreferrer">Devin Fusion sidekick pattern</a>: a main agent that plans and reviews but cannot edit files, and a cheaper sidekick that executes every change.</p>
           <p>The main agent’s file editing is denied at the permission layer. Its only way to change a file is to hand a spec to the sidekick. Frontier intelligence stays on the plan and the review; mechanical work stays cheap.</p>
 
           <div class="docs-callout">
-            <p><strong>Built for OpenCode.</strong> The v1 reference implementation with mechanical edit deny, multi-provider models, and a setup skill.</p>
+            <p><strong>Built for OpenCode.</strong> A one-line npm plugin install with mechanical edit deny, multi-provider models, and the <code>/conductor</code> command. Forked from <a href="https://github.com/mihneaptu/opencode-fusion" target="_blank" rel="noopener noreferrer">opencode-fusion</a>.</p>
           </div>
 
-          <p class="docs-note">This page is the short version. The <a href="https://github.com/mihneaptu/opencode-fusion#readme" target="_blank" rel="noopener noreferrer">README</a> is the canonical reference — full setup, provider examples, FAQ, and the complete troubleshooting list live there.</p>
+          <p class="docs-note">This page is the short version. The <a href="https://github.com/JoshuaKimsey/opencode-conductor#readme" target="_blank" rel="noopener noreferrer">README</a> is the canonical reference — full setup, provider examples, FAQ, and the complete troubleshooting list live there.</p>
         </section>
 
         <section id="how-it-works" class="docs-section">
           <h2>How it works</h2>
-          <p>One cycle: main explores (via helpers), plans, hands the sidekick a spec, reviews the diff, loops until it passes, then delivers.</p>
+          <p>The plugin injects the agent team at startup. One cycle: main explores (via helpers), plans, hands the sidekick a spec, reviews the diff, loops until it passes, then delivers. Suggested models below are the 2026 defaults from the <code>opencode-go</code> profile.</p>
 
           <div class="docs-table-wrap">
             <table class="docs-table">
@@ -190,6 +191,7 @@
                   <th scope="col">Agent</th>
                   <th scope="col">Role</th>
                   <th scope="col">Required</th>
+                  <th scope="col">Suggested model (2026)</th>
                 </tr>
               </thead>
               <tbody>
@@ -197,41 +199,49 @@
                   <td><code>build</code></td>
                   <td>Main: plan, delegate, review</td>
                   <td>Core</td>
+                  <td><code>opencode-go/kimi-k3</code></td>
                 </tr>
                 <tr>
                   <td><code>plan</code></td>
                   <td>Plan mode — same brain, no execute</td>
                   <td>Core</td>
+                  <td><code>opencode-go/kimi-k3</code></td>
                 </tr>
                 <tr>
                   <td><code>sidekick</code></td>
                   <td>Execute edits and commands</td>
                   <td>Core</td>
+                  <td><code>opencode-go/deepseek-v4-flash</code></td>
                 </tr>
                 <tr>
                   <td><code>explore</code></td>
-                  <td>Fast read-only search</td>
+                  <td>Fast read-only search (built-in agent, model-only)</td>
                   <td>Core</td>
+                  <td><code>opencode-go/deepseek-v4-flash</code></td>
                 </tr>
                 <tr>
                   <td><code>research</code></td>
                   <td>Read-only web / docs research</td>
                   <td>Optional</td>
+                  <td><code>opencode-go/kimi-k2.7-code</code></td>
                 </tr>
                 <tr>
                   <td><code>design</code></td>
                   <td>Frontend / UI implementation</td>
                   <td>Optional</td>
+                  <td><code>opencode-go/kimi-k3</code></td>
                 </tr>
                 <tr>
                   <td><code>reviewer</code></td>
                   <td>Critique a plan before implementation; audit a diff before commit</td>
                   <td>Optional</td>
+                  <td><code>opencode-go/grok-4.5</code></td>
                 </tr>
                 <tr>
                   <td><code>vision</code></td>
                   <td>Transcribe images if main cannot</td>
                   <td>Optional</td>
+                  <td>unset by default</td>
                 </tr>
               </tbody>
             </table>
@@ -245,49 +255,53 @@
           <p>The pattern’s guarantees live in two layers. Knowing which is which answers most “what if the model just ignores the instructions?” questions.</p>
 
           <h3>Enforced — the permission layer</h3>
-          <p>OpenCode checks these on every tool call, regardless of what the model reads or intends. The main agent’s <code>edit</code>, <code>grep</code>, <code>glob</code>, and <code>list</code> are denied — denied tools are removed from the model’s tool schema entirely, so there is no edit tool for it to decline to use. Bash is deny-by-default with a short verify/git allowlist, and delegation is bounded by an explicit <code>task</code> allowlist. The executors cannot commit or push — <code>git commit</code> and <code>git push</code> are denied for the sidekick and design agents, the main agent needs per-command approval for both, and force/mirror/delete-ref pushes are denied outright. If the main agent “won’t delegate,” the result is visible inaction — never a silent bypass.</p>
+          <p>OpenCode checks these on every tool call, regardless of what the model reads or intends. The main agent’s <code>edit</code>, <code>grep</code>, <code>glob</code>, and <code>list</code> are denied — denied tools are removed from the model’s tool schema entirely, so there is no edit tool for it to decline to use. Bash is deny-by-default with a short verify/git allowlist, and delegation is bounded by an explicit <code>task</code> allowlist. The executors cannot commit or push — <code>git commit</code> and <code>git push</code> are denied for the sidekick and design agents, the main agent needs per-command approval for both, and force/mirror/delete-ref pushes are denied outright. The <code>conductor_configure</code> and <code>conductor_status</code> tools serve only the build and plan agents. If the main agent “won’t delegate,” the result is visible inaction — never a silent bypass. These are the same permission maps opencode-fusion v1.2.0 injected, ported verbatim.</p>
 
           <h3>Advised — the prompt layer</h3>
-          <p>Spec precision, diff-review rigor, cost discipline, and skill usage are instructions in the agent prompts. Skills load at the model’s discretion in OpenCode — nothing can force an agent to read or apply one — which is exactly why no guarantee depends on them; the skill in this repo is just the installer. Slacking here costs quality or tokens, never an unauthorized edit.</p>
+          <p>Spec precision, diff-review rigor, cost discipline, and skill usage are instructions in the agent prompts. Skills load at the model’s discretion in OpenCode — nothing can force an agent to read or apply one — which is exactly why no guarantee depends on them. Slacking here costs quality or tokens, never an unauthorized edit.</p>
 
           <h3>Auditable</h3>
-          <p>The optional <code>fusion-audit</code> plugin logs the delegation tree and aggregates per-agent token usage per session, and OpenCode’s session DB records every agent’s actual tool calls — “did it really delegate?” and “where did the tokens go?” are checkable from recorded data.</p>
+          <p>The optional <code>audit</code> option enables a hook that logs the delegation tree and aggregates per-agent token usage per session, and OpenCode’s session DB records every agent’s actual tool calls — “did it really delegate?” and “where did the tokens go?” are checkable from recorded data.</p>
         </section>
 
         <section id="install-opencode" class="docs-section">
           <h2>Install OpenCode</h2>
-          <p>Fusion lives in your global OpenCode config. No build step; nothing to clone into each project.</p>
+          <p>Add one line to the <code>plugin</code> array of your opencode config — the global <code>~/.config/opencode/opencode.json</code> or a project-level <code>opencode.json</code>. No clone, no build step, no skill.</p>
 
-          <h3>Recommended</h3>
+          <h3>Install</h3>
           <ol class="docs-steps">
-            <li>Install the skill globally with one command (no clone required).</li>
-            <li>Say <strong>set up fusion</strong> — or run <code>/fusion-setup</code>. Skills are discovered on demand, so no restart is needed for this step.</li>
-            <li>Restart OpenCode when the skill finishes — the config it writes loads at startup.</li>
+            <li>Add the plugin line to your <code>opencode.json</code> (pick a <a href="#profiles">profile</a>, or omit options to start bare).</li>
+            <li>Fully quit and restart OpenCode — opencode auto-installs npm plugins via Bun at startup.</li>
+            <li>Verify with the <a href="#verify">lint smoke test</a>.</li>
           </ol>
 
           <div class="command">
             <div class="command-bar">
-              <span class="command-label">Terminal</span>
-              <button class="copy-btn" type="button" data-copy-target="docs-cmd-opencode" aria-label="Copy OpenCode install command">
+              <span class="command-label">opencode.json</span>
+              <button class="copy-btn" type="button" data-copy-target="docs-cmd-opencode" aria-label="Copy OpenCode install snippet">
                 <svg class="copy-btn-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></svg>
                 <span class="copy-btn-text">Copy</span>
               </button>
             </div>
-            <pre class="command-pre"><code id="docs-cmd-opencode">npx skills add mihneaptu/opencode-fusion --skill fusion-setup -g -a opencode -y</code></pre>
+            <pre class="command-pre"><code id="docs-cmd-opencode">{ "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]] }</code></pre>
           </div>
 
-          <p class="docs-note">Installs into your global OpenCode skills folder. Works on Windows, macOS, and Linux. Requires Node 20.12 or newer — on older Node the installer crashes with a <code>styleText</code> error (see <a href="#troubleshooting">Troubleshooting</a>).</p>
+          <p class="docs-note">Works on Windows, macOS, and Linux. No skill, no installer, no interview. Uninstall by removing the line and restarting.</p>
 
-          <h3>Offline / manual fallback</h3>
-          <p>From a clone of this repo, copy <code>.opencode/skills/fusion-setup</code> into <code>~/.config/opencode/skills/</code> (Windows: <code>%USERPROFILE%\.config\opencode\skills\</code>), then run the setup flow as above — skills are discovered on demand, no restart needed.</p>
-
-          <h3>After setup</h3>
-          <p>The skill writes <code>~/.config/opencode/opencode.json</code>, installs agent prompts under <code>~/.config/opencode/agent/</code>, and asks you to restart. To change models later, say “reconfigure fusion” or edit the config directly.</p>
+          <h3>The /conductor command</h3>
+          <p>The plugin injects a <code>/conductor</code> slash command. With no arguments it runs <code>conductor_status</code>, a read-only report of where the plugin entry lives, the effective role-to-model resolution, and any leftover fusion-install hazards. With arguments it calls <code>conductor_configure</code>, which edits the plugin's own options atomically (a rolling backup at <code>opencode.json.conductor-backup</code>):</p>
+          <ul class="docs-list">
+            <li><code>/conductor</code> — status report only.</li>
+            <li><code>/conductor sidekick=opencode-go/deepseek-v4-flash</code> — set per-role model overrides.</li>
+            <li><code>/conductor profile chatgpt</code> — switch the subscription profile.</li>
+            <li><code>/conductor audit=true claude=true</code> — toggle the optional feature flags.</li>
+          </ul>
+          <p>After a change, restart OpenCode — the agent registry is materialized at startup on opencode 1.18.x, so model changes require a restart. <code>/conductor</code> always tells you so.</p>
         </section>
 
         <section id="profiles" class="docs-section">
           <h2>Subscription profiles</h2>
-          <p>On a subscription? Name it during setup — or run <code>/fusion-setup opencode-go</code> — and the skill starts from a bundled profile, a ready-made role-to-model mapping, instead of interviewing you per role. Authentication stays out-of-band via <code>opencode auth login</code> (or <code>/connect</code>): profiles carry no keys, and the skill never asks for one in chat.</p>
+          <p>On a subscription? Set the <code>profile</code> option — <code>"profile": "opencode-go"</code> — and the plugin fills in a ready-made role-to-model mapping. Authentication stays out-of-band via <code>opencode auth login</code> (or <code>/connect</code>): profiles carry no keys and are never asked about in chat.</p>
 
           <div class="docs-table-wrap">
             <table class="docs-table">
@@ -328,7 +342,7 @@
             </table>
           </div>
 
-          <p class="docs-note">Every pick stays overridable, and model lineups rotate — the <a href="https://github.com/mihneaptu/opencode-fusion#subscription-profiles" target="_blank" rel="noopener noreferrer">README’s profiles section</a> is canonical for the full role tables and caveats.</p>
+          <p class="docs-note">Every pick stays overridable per role via the <code>models</code> option, and model lineups rotate — the <a href="https://github.com/JoshuaKimsey/opencode-conductor#profiles" target="_blank" rel="noopener noreferrer">README’s profiles section</a> is canonical for the full role tables and caveats.</p>
         </section>
 
         <section id="verify" class="docs-section">
@@ -355,27 +369,43 @@
 
         <section id="customize" class="docs-section">
           <h2>Customize</h2>
-          <p>Models live in <code>~/.config/opencode/opencode.json</code> under <code>agent.&lt;role&gt;.model</code>; role behavior lives in the agent prompts under <code>~/.config/opencode/agent/</code>. Edit either, then restart OpenCode — config loads at startup. Keep the sidekick cheaper and faster than main when you can.</p>
-          <p>The README covers the rest: <a href="https://github.com/mihneaptu/opencode-fusion#customize" target="_blank" rel="noopener noreferrer">swapping models per provider</a>, <a href="https://github.com/mihneaptu/opencode-fusion#adjust-the-bash-allowlist" target="_blank" rel="noopener noreferrer">adjusting the main agent’s bash allowlist</a> (keep <code>"*": "deny"</code> first; run one command per call — a chained line is matched segment by segment and one denied segment denies the whole call), optional hardening keys, and <a href="https://github.com/mihneaptu/opencode-fusion#uninstall" target="_blank" rel="noopener noreferrer">uninstalling</a> (say <code>undo fusion</code>; it restores your pre-Fusion config and removes only what it installed).</p>
+          <p>All plugin options live in the plugin entry of <code>~/.config/opencode/opencode.json</code>: <code>profile</code> (the subscription profile), <code>models</code> (per-role overrides as <code>role -> "provider/model-id"</code> for <code>build</code>, <code>plan</code>, <code>sidekick</code>, <code>explore</code>, <code>research</code>, <code>design</code>, <code>reviewer</code>, <code>vision</code>), <code>audit</code> (boolean, off by default), and <code>claude</code> (boolean, off by default — enables the Claude Code bridge tools <code>conductor_claude_status</code>/<code>conductor_claude_review</code>, which require the Claude Pro/Max CLI installed and authenticated).</p>
+          <p>Edit the entry, then restart OpenCode — the agent registry is materialized at startup, so model changes need a full restart. Or run <code>/conductor</code> with arguments to have <code>conductor_configure</code> edit the options for you atomically, and restart when it tells you to. Keep the sidekick cheaper and faster than main when you can.</p>
+          <p>The README covers the rest: <a href="https://github.com/JoshuaKimsey/opencode-conductor#configuration" target="_blank" rel="noopener noreferrer">configuration options and examples</a>, <a href="https://github.com/JoshuaKimsey/opencode-conductor#enforced-vs-advised" target="_blank" rel="noopener noreferrer">adjusting the main agent’s bash allowlist</a> (keep <code>"*": "deny"</code> first; run one command per call — a chained line is matched segment by segment and one denied segment denies the whole call), and <a href="#migration">migrating from opencode-fusion</a> (run the old <code>undo fusion</code> to remove the file-based install first).</p>
+        </section>
+
+        <section id="migration" class="docs-section">
+          <h2>Migration from fusion</h2>
+          <p>Coming from <a href="https://github.com/mihneaptu/opencode-fusion" target="_blank" rel="noopener noreferrer">opencode-fusion</a> (the file-based skill bundle)? Three steps:</p>
+          <ol class="docs-steps">
+            <li>Say <strong>undo fusion</strong> with the old fusion-setup skill — or run its installer's undo — to remove the file-based agents and prompts under <code>~/.config/opencode/</code>. Leftover files would override the plugin-injected agents field-by-field.</li>
+            <li>Add the plugin line to <code>opencode.json</code> as in <a href="#install-opencode">Install</a>.</li>
+            <li>Restart OpenCode.</li>
+          </ol>
+          <p>Run <code>/conductor</code> with no arguments afterwards — <code>conductor_status</code> checks for leftover fusion files and warns you if any are detected. The <code>audit</code> and <code>claude</code> options fold in what the old <code>fusion-audit</code> and <code>fusion-claude</code> plugins provided.</p>
         </section>
 
         <section id="troubleshooting" class="docs-section">
           <h2>Troubleshooting</h2>
 
-          <p>If you installed the optional <code>/fusion-status</code> command, run it first — it checks the usual suspects in one shot: live enforcement in the running session, the config on disk, and the installed agent files. It only reports; it changes nothing.</p>
+          <p>Run <code>/conductor</code> with no arguments first — <code>conductor_status</code> checks the usual suspects in one shot: where the plugin entry lives and its options, the effective role-to-model resolution, and leftover fusion-install hazards. It only reports; it changes nothing.</p>
 
           <dl class="docs-faq">
             <div class="docs-faq-item">
-              <dt>Install crashes with a <code>styleText</code> SyntaxError</dt>
-              <dd>Node is too old for the installer. Since <code>skills@1.5.16</code>, Vercel's CLI needs Node 20.12+ even though the package still claims Node 18 support (<a href="https://github.com/vercel-labs/skills/issues/1672" target="_blank" rel="noopener noreferrer">vercel-labs/skills#1672</a>). Fix any of three ways: upgrade Node (18 is end-of-life), pin the last compatible installer with <code>npx skills@1.5.15 add mihneaptu/opencode-fusion --skill fusion-setup -g -a opencode -y</code>, or use the offline fallback in <a href="#install-opencode">Install</a> — the skill itself has no Node dependency.</dd>
+              <dt>The plugin did not load / the agents are not injected</dt>
+              <dd>The config was not loaded. Fully quit and restart OpenCode — plugins auto-install and the agent registry materializes at startup, not mid-session. Confirm the plugin entry is in the <code>plugin</code> array of the right <code>opencode.json</code> and that the version is pinned correctly.</dd>
             </div>
             <div class="docs-faq-item">
-              <dt>Main agent edits files directly</dt>
-              <dd>Config was not loaded. Fully quit and restart OpenCode. Confirm <code>edit: deny</code> in the installed <code>~/.config/opencode/agent/build.md</code> frontmatter.</dd>
+              <dt>Leftover fusion files override the injected agents</dt>
+              <dd>File-based agents from a previous opencode-fusion install override the plugin-injected agent config field-by-field. Say <code>undo fusion</code> with the old fusion-setup skill (or run its installer's undo) to remove them, then restart. <code>conductor_status</code> names the offending files.</dd>
+            </div>
+            <div class="docs-faq-item">
+              <dt>Model changes don't take effect</dt>
+              <dd>The agent registry is materialized at startup on opencode 1.18.x, so a change to <code>models</code> or <code>profile</code> requires a full restart. This is a platform limitation, not a plugin bug.</dd>
             </div>
           </dl>
 
-          <p>More cases — sidekick never invoked, model 404/400, a blocked bash command, searches missing gitignored files — are in the <a href="https://github.com/mihneaptu/opencode-fusion#troubleshooting" target="_blank" rel="noopener noreferrer">README’s troubleshooting section</a>.</p>
+          <p>More cases — sidekick never invoked, model 404/400, a blocked bash command, searches missing gitignored files — are covered in the <a href="https://github.com/JoshuaKimsey/opencode-conductor#readme" target="_blank" rel="noopener noreferrer">README</a>, which is the canonical reference.</p>
         </section>
 
         <section id="limitations" class="docs-section">
@@ -397,19 +427,19 @@
             </div>
             <div class="docs-faq-item">
               <dt>What if agents ignore the prompts or never load the skills?</dt>
-              <dd>You lose quality, not guarantees — see <a href="#guarantees">Enforced vs. advised</a>. Delegation is not a behavior the main agent chooses: its edit and search tools are removed from its tool schema, so handing work to the sidekick is the only path to changing a file. The <code>fusion-audit</code> plugin and OpenCode’s session DB record what every agent actually did.</dd>
+              <dd>You lose quality, not guarantees — see <a href="#guarantees">Enforced vs. advised</a>. Delegation is not a behavior the main agent chooses: its edit and search tools are removed from its tool schema, so handing work to the sidekick is the only path to changing a file. The optional <code>audit</code> hook and OpenCode’s session DB record what every agent actually did.</dd>
             </div>
             <div class="docs-faq-item">
               <dt>How is this different from superpowers or other orchestration?</dt>
-              <dd>Different layer. Skill libraries like <a href="https://github.com/obra/superpowers" target="_blank" rel="noopener noreferrer">superpowers</a> teach agents <em>how</em> to work — process knowledge the model can still ignore. Fusion configures <em>what agents can do</em> at the permission layer, and adds per-role model routing for cost with cross-vendor review as a side effect. No framework, no code — just configuration on a normal session. The two compose: superpowers supports OpenCode, so its skills can run inside a Fusion setup.</dd>
+              <dd>Different layer. Skill libraries like <a href="https://github.com/obra/superpowers" target="_blank" rel="noopener noreferrer">superpowers</a> teach agents <em>how</em> to work — process knowledge the model can still ignore. Conductor configures <em>what agents can do</em> at the permission layer, and adds per-role model routing for cost with cross-vendor review as a side effect. No framework, no code — just a one-line plugin on a normal session. The two compose: superpowers supports OpenCode, so its skills can run inside a Conductor setup.</dd>
             </div>
           </dl>
         </section>
 
         <footer class="docs-end">
-          <p>Independent project inspired by Cognition’s Devin Fusion. Not affiliated with or endorsed by Cognition, Devin, or OpenCode.</p>
+          <p>Forked from opencode-fusion. Independent project inspired by Cognition’s Devin Fusion. Not affiliated with or endorsed by Cognition, Devin, or OpenCode.</p>
           <p>
-            <a href="https://github.com/mihneaptu/opencode-fusion" target="_blank" rel="noopener noreferrer">GitHub repository</a>
+            <a href="https://github.com/JoshuaKimsey/opencode-conductor" target="_blank" rel="noopener noreferrer">GitHub repository</a>
             ·
             <a href="changelog.html">Changelog</a>
             ·
@@ -428,7 +458,7 @@
     <div class="container footer-shell">
       <div class="footer-main">
         <div class="footer-brand">
-          <a class="wordmark" href="index.html" aria-label="opencode Fusion home">
+          <a class="wordmark" href="index.html" aria-label="opencode Conductor home">
             <span class="wordmark-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                 <defs>
@@ -444,7 +474,7 @@
                 </g>
               </svg>
             </span>
-            <span class="wordmark-text">opencode<span class="wordmark-accent">Fusion</span></span>
+            <span class="wordmark-text">opencode<span class="wordmark-accent">Conductor</span></span>
           </a>
           <p class="footer-desc">Main agent plans and reviews. Sidekick edits. Built for OpenCode.</p>
         </div>
@@ -454,7 +484,7 @@
           <a href="docs.html">Docs</a>
           <a href="changelog.html">Changelog</a>
           <a href="index.html#get-started">Get started</a>
-          <a class="footer-nav-ext" href="https://github.com/mihneaptu/opencode-fusion" target="_blank" rel="noopener noreferrer">
+          <a class="footer-nav-ext" href="https://github.com/JoshuaKimsey/opencode-conductor" target="_blank" rel="noopener noreferrer">
             GitHub
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h7v7M13 3 3 13"/></svg>
           </a>
@@ -462,8 +492,8 @@
       </div>
 
       <div class="footer-meta">
-        <p class="footer-copyright">&copy; 2026 opencode Fusion &middot; Open source</p>
-        <p class="footer-disclaimer">Independent project inspired by Cognition&rsquo;s Devin Fusion. Not affiliated with or endorsed by Cognition, Devin, or OpenCode.</p>
+        <p class="footer-copyright">&copy; 2026 opencode Conductor &middot; Open source</p>
+        <p class="footer-disclaimer">Forked from opencode-fusion. Independent project inspired by Cognition&rsquo;s Devin Fusion. Not affiliated with or endorsed by Cognition, Devin, or OpenCode.</p>
       </div>
     </div>
   </footer>

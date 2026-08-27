@@ -1,70 +1,70 @@
 'use strict';
 
-const { test, describe, before, after } = require('node:test');
+const { test, describe, before } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-const pluginSource = path.join(__dirname, '..', '.opencode', 'skills', 'fusion-setup', 'plugins', 'fusion-audit.js');
-
-// The plugin uses ES module syntax inside a CommonJS package scope. opencode's
-// loader handles that natively; plain Node needs an explicit module scope, so
-// the test imports a copy from a temp dir that declares type: module.
-describe('fusion-audit plugin smoke test', () => {
-  let tempDir;
-  let hooks;
+// Ported from test/plugin.test.js (the fusion-audit plugin smoke test). The
+// source plugin returned { event, 'tool.execute.after' }; the conductor plugin
+// wires auditHook's return value as the single "event" hook, so tool-execution
+// logging now rides the event stream (message.part.updated with completed tool
+// parts) instead of the tool.execute.after trigger hook. Behavioral
+// expectations are unchanged.
+describe('conductor-audit event hook (ported from fusion-audit)', () => {
+  let auditHook;
   let logged;
+  let hook;
 
   before(async () => {
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fusion-audit-test-'));
-    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ type: 'module' }));
-    const target = path.join(tempDir, 'fusion-audit.js');
-    fs.copyFileSync(pluginSource, target);
-    const mod = await import(pathToFileURL(target).href);
-    assert.equal(typeof mod.FusionAudit, 'function', 'plugin must export FusionAudit');
+    ({ auditHook } = await import(pathToFileURL(path.join(__dirname, '..', 'src', 'audit.js')).href));
 
     logged = [];
-    const client = { app: { log: (entry) => { logged.push(entry.body); } } };
-    hooks = await mod.FusionAudit({ client });
+    const input = { client: { app: { log: (entry) => { logged.push(entry.body); } } } };
+    hook = auditHook(input, { audit: true });
   });
 
-  after(() => {
-    if (tempDir) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
-
-  test('returns the hook surface opencode expects', () => {
-    assert.equal(typeof hooks.event, 'function', 'plugin must register an event hook');
-    assert.equal(typeof hooks['tool.execute.after'], 'function', 'plugin must register tool.execute.after');
+  test('returns undefined when audit is off and an event hook function when on', () => {
+    const input = { client: { app: { log: () => {} } } };
+    assert.equal(auditHook(input, {}), undefined, 'audit must be opt-in');
+    assert.equal(auditHook(input, { audit: false }), undefined, 'audit false must stay inert');
+    assert.equal(typeof hook, 'function', 'audit on must return the event hook function');
+    // The contract holds even when the plugin input (and thus the client) is
+    // missing: the hook still exists but degrades to a no-op.
+    assert.equal(typeof auditHook(undefined, { audit: true }), 'function');
   });
 
   test('logs child session spawns and ignores root sessions', async () => {
     logged.length = 0;
-    await hooks.event({
+    await hook({
       event: {
         type: 'session.created',
         properties: { info: { id: 'ses_child', parentID: 'ses_root', title: 'delegated work' } },
       },
     });
-    await hooks.event({
+    await hook({
       event: { type: 'session.created', properties: { info: { id: 'ses_root' } } },
     });
-    await hooks.event({ event: { type: 'message.updated', properties: {} } });
+    await hook({ event: { type: 'message.updated', properties: {} } });
 
     assert.equal(logged.length, 1, 'only the child session spawn should be logged');
-    assert.equal(logged[0].service, 'fusion-audit');
+    assert.equal(logged[0].service, 'conductor-audit');
     assert.equal(logged[0].message, 'subagent session spawned');
     assert.equal(logged[0].extra.parentID, 'ses_root');
   });
 
-  test('logs edit/write/apply_patch/task tool calls and ignores read-only tools', async () => {
+  test('logs edit/write/apply_patch/task tool executions and ignores read-only tools', async () => {
     logged.length = 0;
-    // "apply_patch" is opencode's third mutation tool gated by the edit permission.
+    // "apply_patch" is opencode's third mutation tool gated by the edit
+    // permission. Tool executions reach the event hook as completed tool parts;
+    // a tool part still running or in error is not a finished execution.
     for (const tool of ['edit', 'write', 'apply_patch', 'task', 'read', 'grep', 'bash']) {
-      await hooks['tool.execute.after']({ tool, sessionID: 'ses_x' });
+      await hook({
+        event: {
+          type: 'message.part.updated',
+          properties: { sessionID: 'ses_x', part: { type: 'tool', tool, state: { status: 'completed' } } },
+        },
+      });
     }
     assert.deepEqual(
       logged.map((entry) => entry.extra.tool),
@@ -75,7 +75,7 @@ describe('fusion-audit plugin smoke test', () => {
 
   test('aggregates assistant token usage by agent and model when a session becomes idle', async () => {
     logged.length = 0;
-    const update = (info) => hooks.event({
+    const update = (info) => hook({
       event: { type: 'message.updated', properties: { info: { role: 'assistant', ...info } } },
     });
 
@@ -100,10 +100,10 @@ describe('fusion-audit plugin smoke test', () => {
       providerID: 'other', modelID: 'fast-model', cost: 0.25,
       tokens: { input: 9, output: 10, reasoning: 3, cache: { read: 5, write: 1 } },
     });
-    await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'ses_usage' } } });
+    await hook({ event: { type: 'session.idle', properties: { sessionID: 'ses_usage' } } });
 
     assert.deepEqual(logged, [{
-      service: 'fusion-audit',
+      service: 'conductor-audit',
       level: 'info',
       message: 'session token usage',
       extra: {
@@ -121,17 +121,17 @@ describe('fusion-audit plugin smoke test', () => {
       },
     }]);
 
-    await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'ses_usage' } } });
+    await hook({ event: { type: 'session.idle', properties: { sessionID: 'ses_usage' } } });
     assert.equal(logged.length, 1, 'an idle session with no new messages must not log twice');
   });
 
   test('ignores malformed and empty event payloads without throwing or logging', async () => {
     logged.length = 0;
     await assert.doesNotReject(async () => {
-      await hooks.event({});
-      await hooks.event({ event: {} });
-      await hooks.event({ event: { type: 'message.updated' } });
-      await hooks.event({
+      await hook({});
+      await hook({ event: {} });
+      await hook({ event: { type: 'message.updated' } });
+      await hook({
         event: {
           type: 'message.updated',
           properties: {
@@ -142,7 +142,7 @@ describe('fusion-audit plugin smoke test', () => {
           },
         },
       });
-      await hooks.event({
+      await hook({
         event: {
           type: 'message.updated',
           properties: {
@@ -153,8 +153,21 @@ describe('fusion-audit plugin smoke test', () => {
           },
         },
       });
-      await hooks.event({ event: { type: 'session.idle', properties: { sessionID: 'ses_bad' } } });
-      await hooks.event({ event: { type: 'session.idle', properties: {} } });
+      // Tool parts that are not completed executions must not log either.
+      await hook({
+        event: {
+          type: 'message.part.updated',
+          properties: { sessionID: 'ses_bad', part: { type: 'tool', tool: 'edit', state: { status: 'running' } } },
+        },
+      });
+      await hook({
+        event: {
+          type: 'message.part.updated',
+          properties: { sessionID: 'ses_bad', part: { type: 'tool', tool: 'edit', state: { status: 'error' } } },
+        },
+      });
+      await hook({ event: { type: 'session.idle', properties: { sessionID: 'ses_bad' } } });
+      await hook({ event: { type: 'session.idle', properties: {} } });
     });
     assert.equal(logged.length, 0);
   });

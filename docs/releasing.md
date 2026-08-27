@@ -1,24 +1,23 @@
 # Releasing
 
-How a change gets from a pull request to a published release.
+How a change gets from a pull request to a published release of
+`@joshuakimsey/opencode-conductor`.
 
 ## What users actually install
 
-```
-npx skills add mihneaptu/opencode-fusion --skill fusion-setup -g -a opencode -y
-```
-
-That command carries no ref, so it resolves the default branch. **`main` is the
-release channel**; a tag records what shipped and does not gate distribution.
-Keep `main` installable at every commit rather than treating unreleased work as
-hidden.
-
-To install an exact version, append a ref. Both forms resolve the tag:
+Users install the published npm package:
 
 ```
-npx skills add mihneaptu/opencode-fusion#v1.2.0 --skill fusion-setup -g -a opencode -y
-npx skills add https://github.com/mihneaptu/opencode-fusion/tree/v1.2.0 --skill fusion-setup -g -a opencode -y
+{ "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]] }
 ```
+
+opencode auto-installs npm plugins via Bun at startup, so the package on the
+npm registry **is** the release channel. A git tag records what shipped; it
+does not gate distribution.
+
+The package is scoped and currently unpublished, so the first release publishes
+it. Scoped packages publish to the public registry only with an explicit access
+flag (see below).
 
 ## Per-pull-request duty
 
@@ -36,37 +35,22 @@ changelog at runtime; `npm test` fails when the committed page has drifted.
 
 Skip the changelog for internal refactors, test-only changes, and cosmetic CSS.
 
-Writing the bullet when the change is fresh is the whole point. Release 1.1.0
-had to reorganize headings after the fact because entries had accumulated
-unsorted.
-
 ## Choosing the number
 
-The version describes the skill bundle, so judge it by what happens to an
-installed copy.
+The version describes the plugin, so judge it by what happens to an installed
+copy.
 
 | Bump | When |
 | --- | --- |
-| Major | A manifest written by an older bundle can no longer be read or undone, or an installed role disappears |
-| Minor | New capability, or changed behavior an existing install keeps working through |
+| Major | The plugin's injected agents or permission maps change in a way an existing install depends on, or the config shape breaks |
+| Minor | New capability (a new option, tool, or agent) an existing install keeps working through |
 | Patch | Fixes that change nothing a user can do |
-
-The manifest promise is the one that matters: `.fusion-install.json` written by
-any earlier version must stay readable and undoable, or the release is major.
 
 ## Cutting the release
 
-One pull request, then two commands.
-
-1. Bump the version in **both** places, in the same commit:
-   - `version` in `package.json`
-   - `BUNDLE_VERSION` in `.opencode/skills/fusion-setup/scripts/install.js`
-
-   A contract test fails when they diverge, so a half-done bump cannot merge.
-
-2. Rename `## Unreleased` to `## X.Y.Z - YYYY-MM-DD`, using the date you expect
-   to publish rather than when the first entry landed.
-
+1. Bump `version` in `package.json`.
+2. Add the matching `## X.Y.Z - YYYY-MM-DD` entry to `CHANGELOG.md`, using the
+   date you expect to publish rather than when the first entry landed.
 3. Regenerate and verify:
 
    ```
@@ -75,13 +59,24 @@ One pull request, then two commands.
    npm run check-profiles
    ```
 
-4. Open the pull request, wait for CI, and merge it.
+4. Publish to npm. `package.json` currently carries `"private": true`, which
+   blocks `npm publish`; flip it to `false` (or override with
+   `npm publish --access public`, which publishes scoped packages to the public
+   registry regardless). One of the two is required - a scoped package is
+   private by default and npm refuses to publish it publicly otherwise.
 
-5. Tag the merge commit and publish:
+   ```
+   npm publish --access public
+   ```
+
+   The `files` array ships `src/` only; the site, tests, and scripts are not
+   part of the published package.
+
+5. Tag the merge commit and create the GitHub release:
 
    ```
    git switch main && git pull --ff-only
-   git tag -a vX.Y.Z -m "opencode-fusion X.Y.Z"
+   git tag -a vX.Y.Z -m "opencode-conductor X.Y.Z"
    git push origin vX.Y.Z
    gh release create vX.Y.Z --title "vX.Y.Z" --latest --notes-file <file>
    ```
@@ -89,13 +84,13 @@ One pull request, then two commands.
    Tag the merge commit, not an earlier one, so the tag contains the changelog
    entry that describes it.
 
-Because the release also touches `site/`, merging triggers a Pages deploy. Check
-the published changelog page afterwards.
+Because the release also touches `site/`, merging triggers a Pages deploy at
+https://joshuakimsey.github.io/opencode-conductor/. Check the published
+changelog page afterwards.
 
 ## Known rough edge
 
-`BUNDLE_VERSION` is a literal that moves only at release, so an install from
-`main` between releases records the previous version in `.fusion-install.json`.
-Traceability is approximate mid-cycle. Switching to an `X.Y.Z-dev` bump right
-after each release would fix that, at the cost of `main` always advertising a
-version that has no release.
+The published version is a literal in `package.json`, so a check out of `main`
+between releases runs the previous version's code while `CHANGELOG.md` may
+already describe the next one. Traceability is approximate mid-cycle; the
+changelog stays the single source of truth for what shipped.

@@ -1,12 +1,51 @@
 # Changelog
 
-Notable changes to this project. The version is the skill bundle's version; it
-is recorded as `bundleVersion` in `.fusion-install.json` when you install, so an
-installed copy can be traced back to the release that applied it.
+Notable changes to this project. This is the changelog for
+`@joshuakimsey/opencode-conductor`, the opencode plugin; the release history of
+the forked `opencode-fusion` project that preceded it is preserved below with
+its release headings prefixed `fusion-` (the plugin's own releases use plain
+versions).
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## 1.2.0 - 2026-08-24
+## 1.0.0 - 2026-08-27
+
+### Changed
+
+- Forked and rebranded from opencode-fusion v1.2.0 into a real opencode npm
+  plugin distributed as `@joshuakimsey/opencode-conductor` (scoped; the
+  unscoped name is taken). The skill, installer, and manifest machinery are
+  deleted; the plugin is installed by adding one line to the `plugin` array of
+  `opencode.json`, and opencode auto-installs it via Bun at startup. Uninstall
+  is removing that line.
+- The `fusion-setup` / `fusion-status` commands and the reconfigure interview
+  are replaced by a single `/conductor` slash command backed by two tools:
+  `conductor_configure` (deterministically edits the plugin's own options entry
+  atomically, with a rolling backup at `opencode.json.conductor-backup`) and
+  `conductor_status` (a read-only health/config report, including leftover
+  fusion-install hazard detection for migration). The tools serve only the
+  build and plan agents.
+- The `fusion-audit` plugin is folded into the `audit` option: an opt-in event
+  hook that logs the delegation tree and aggregates per-agent token usage.
+- The `fusion-claude` plugin is folded into the `claude` option: an opt-in
+  Claude Code Pro/Max plan-review bridge exposing `conductor_claude_status` and
+  `conductor_claude_review`. Requires the official Claude CLI installed and
+  authenticated; the bridge keeps the OAuth credential inside Claude Code.
+- The live integration suite now proves schema-removal enforcement with the
+  plugin-injected agents on opencode 1.18.x, not with file-based agent prompts.
+- Option changes (models, profile, audit, claude) require a restart on opencode
+  1.18.x: the agent registry is materialized at startup. This is a platform
+  limitation and is documented as such; `/conductor` always tells the user to
+  restart after a change.
+- OpenCode 2 remains unsupported (beta; its permission translation is call-time
+  rather than schema-removal, and its plugin API differs). A v2 port is planned
+  but not shipped. The known upstream config-hook/agent-registry race
+  (anomalyco/opencode#30955) on rare first delegation is documented; a retry
+  resolves it.
+- The permission maps ported from opencode-fusion v1.2.0 are unchanged, so the
+  Enforced vs. advised guarantees are carried over verbatim.
+
+## fusion-1.2.0 - 2026-08-24
 
 ### Changed
 
@@ -44,7 +83,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The repository map no longer claims fixed model choices for the gitignored
   local `opencode.json`, whose contents are intentionally developer-specific.
 
-## 1.1.0 - 2026-07-28
+## fusion-1.1.0 - 2026-07-28
 
 ### Added
 
@@ -176,7 +215,7 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Manifests written before 1.1.0 have no `bundleVersion`. They are still valid
   manifest schema 2, and `undo` continues to accept them.
 
-## 1.0.0
+## fusion-1.0.0
 
 Initial release: the mechanically enforced main/sidekick split, the
 deterministic installer with reversible undo, five subscription profiles, the

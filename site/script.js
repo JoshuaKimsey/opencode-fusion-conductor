@@ -1,5 +1,5 @@
 /* =========================================================================
-   opencode Fusion - interactions
+   opencode Conductor - interactions
    Classic script (no modules). Runs from file://; the only network call is
    the optional GitHub star-count fetch, which fails silently offline.
    ========================================================================= */
@@ -153,7 +153,7 @@
     var cached = readStorage('gh-stars');
     if (cached) show(cached);
 
-    fetch('https://api.github.com/repos/mihneaptu/opencode-fusion')
+    fetch('https://api.github.com/repos/JoshuaKimsey/opencode-conductor')
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (d && typeof d.stargazers_count === 'number') {

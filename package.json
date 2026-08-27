@@ -1,31 +1,37 @@
 {
-  "name": "opencode-fusion",
-  "version": "1.2.0",
+  "name": "@joshuakimsey/opencode-conductor",
+  "version": "1.0.0",
   "private": true,
-  "description": "A main agent that can't edit files - it plans and reviews while a cheaper sidekick does the work. Cognition's Devin Fusion pattern for opencode.",
+  "description": "An opencode plugin: a main agent that plans and reviews but cannot edit files, delegating every change to a cheaper sidekick. Cognition's Devin Fusion pattern as a one-line install.",
+  "main": "src/index.js",
+  "files": [
+    "src"
+  ],
   "license": "MIT",
   "keywords": [
     "opencode",
+    "opencode-plugin",
     "ai-agents",
     "multi-agent",
     "subagent",
-    "devin-fusion",
     "agent-permissions",
     "llm-cost-optimization"
   ],
-  "homepage": "https://github.com/mihneaptu/opencode-fusion#readme",
+  "homepage": "https://github.com/JoshuaKimsey/opencode-conductor",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mihneaptu/opencode-fusion.git"
+    "url": "git+https://github.com/JoshuaKimsey/opencode-conductor.git"
   },
   "bugs": {
-    "url": "https://github.com/mihneaptu/opencode-fusion/issues"
+    "url": "https://github.com/JoshuaKimsey/opencode-conductor/issues"
   },
   "scripts": {
     "test": "node --test",
     "test:integration": "node scripts/run-integration.js",
     "build:changelog": "node scripts/build-changelog.js",
-    "check-install": "node scripts/check-install.js",
     "check-profiles": "node scripts/check-profiles.js"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "^1.18.23"
   }
 }

@@ -1,65 +1,32 @@
 'use strict';
 
-const { test, describe, before, after } = require('node:test');
+const { test, describe, before } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-const source = path.join(
-  __dirname,
-  '..',
-  '.opencode',
-  'skills',
-  'fusion-setup',
-  'plugins',
-  'fusion-claude.js'
-);
+const root = path.join(__dirname, '..');
 
-describe('fusion Claude Code bridge', () => {
-  let dir;
-  let mod;
-  let FusionClaude;
+let claudeTools;
+let Conductor;
+before(async () => {
+  const load = (name) => import(pathToFileURL(path.join(root, 'src', name)).href);
+  const [claude, index] = await Promise.all([load('claude.js'), load('index.js')]);
+  claudeTools = claude.claudeTools;
+  Conductor = index.Conductor;
+});
 
-  before(async () => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fusion-claude-plugin-'));
-    const packageDir = path.join(dir, 'node_modules', '@opencode-ai', 'plugin');
-    fs.mkdirSync(packageDir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-    fs.writeFileSync(
-      path.join(packageDir, 'package.json'),
-      JSON.stringify({ name: '@opencode-ai/plugin', type: 'module', exports: './index.js' })
-    );
-    fs.writeFileSync(
-      path.join(packageDir, 'index.js'),
-      [
-        'export const tool = (definition) => definition;',
-        'tool.schema = {',
-        '  string: () => ({ max() { return this; }, describe() { return this; }, optional() { return this; } }),',
-        '};',
-      ].join('\n')
-    );
-    const pluginCopy = path.join(dir, 'fusion-claude.js');
-    fs.copyFileSync(source, pluginCopy);
-    mod = await import(`${pathToFileURL(pluginCopy).href}?test=${Date.now()}`);
-    ({ FusionClaude } = mod);
-  });
-
-  after(() => {
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  // opencode's loader calls the plugin as server(input, options); tests inject
-  // the process runner through options. A bogus PATH guarantees that a wiring
-  // bug can never reach the real claude CLI from a unit test.
-  const toolsWith = async (options = {}) => {
-    const { tool } = await FusionClaude(undefined, {
-      environment: { PATH: 'fusion-test-no-such-path' },
+describe('Conductor Claude Code bridge (claudeTools factory)', () => {
+  // claudeTools(options) is a tool-factory function: tests inject the process
+  // runner, environment, and timeouts through options. A bogus PATH guarantees
+  // that a wiring bug can never reach the real claude CLI from a unit test.
+  const toolsWith = (options = {}) =>
+    claudeTools({
+      environment: { PATH: 'conductor-test-no-such-path' },
       ...options,
     });
-    return tool;
-  };
 
   const recordingRun = (results) => {
     const calls = [];
@@ -98,18 +65,27 @@ describe('fusion Claude Code bridge', () => {
     stderr: '',
   });
 
-  test('FusionClaude is the only export - opencode calls every export as a plugin', () => {
-    assert.deepEqual(Object.keys(mod), ['FusionClaude']);
+  test('claudeTools returns exactly the two renamed tools', () => {
+    const tools = toolsWith({ run: async () => authResult() });
+    assert.deepEqual(Object.keys(tools).sort(), ['conductor_claude_review', 'conductor_claude_status']);
   });
 
-  test('exposes only status and read-only plan review tools', async () => {
-    const tools = await toolsWith({ run: async () => authResult() });
-    assert.deepEqual(Object.keys(tools).sort(), ['fusion_claude_review', 'fusion_claude_status']);
+  test('index.js wires the conductor tools and the claude tools only when opts.claude is true', async () => {
+    const withClaude = await Conductor(undefined, { claude: true });
+    assert.deepEqual(Object.keys(withClaude.tool).sort(), [
+      'conductor_claude_review',
+      'conductor_claude_status',
+      'conductor_configure',
+      'conductor_status',
+    ]);
+
+    const withoutClaude = await Conductor(undefined, {});
+    assert.deepEqual(Object.keys(withoutClaude.tool).sort(), ['conductor_configure', 'conductor_status']);
   });
 
   test('status verifies first-party Pro/Max auth without returning identity data', async () => {
-    const tools = await toolsWith({ run: async () => authResult() });
-    const output = await tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' });
+    const tools = toolsWith({ run: async () => authResult() });
+    const output = await tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' });
     assert.match(output, /bridge ready.*PRO.*claude-opus-5/i);
     assert.doesNotMatch(output, /must-not-leak|@example\.com/i);
   });
@@ -124,9 +100,9 @@ describe('fusion Claude Code bridge', () => {
       CLAUDE_CODE_USE_BEDROCK: '1',
       CLAUDE_CODE_OAUTH_TOKEN: 'official-cli-token',
     };
-    const tools = await toolsWith({ run, environment });
+    const tools = toolsWith({ run, environment });
     const packet = 'Task and proposed plan';
-    const output = await tools.fusion_claude_review.execute({ packet }, { worktree: 'C:/workspace', agent: 'plan' });
+    const output = await tools.conductor_claude_review.execute({ packet }, { worktree: 'C:/workspace', agent: 'plan' });
 
     assert.match(output, /PLAN_REVISE\nAdd a rollback test\./);
     assert.equal(calls.length, 2);
@@ -163,8 +139,8 @@ describe('fusion Claude Code bridge', () => {
       ANTHROPIC_CUSTOM_HEADERS: 'x-proxy: on',
       Claude_Code_Use_Foundry: '1',
     };
-    const tools = await toolsWith({ run, environment });
-    await tools.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' });
+    const tools = toolsWith({ run, environment });
+    await tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' });
     for (const env of [calls[0].env, calls[1].env]) {
       assert.equal(env.Anthropic_Api_Key, undefined);
       assert.equal(env.claude_code_use_vertex, undefined);
@@ -178,8 +154,8 @@ describe('fusion Claude Code bridge', () => {
     const { calls, run } = recordingRun((options) =>
       options.args[0] === 'auth' ? authResult() : reviewResult('PLAN_APPROVED\nSolid.', 'claude-opus-4-8')
     );
-    const tools = await toolsWith({ run });
-    const output = await tools.fusion_claude_review.execute(
+    const tools = toolsWith({ run });
+    const output = await tools.conductor_claude_review.execute(
       { packet: 'plan', model: 'claude-opus-4-8', effort: 'max' },
       { directory: 'C:/workspace', agent: 'plan' }
     );
@@ -190,7 +166,7 @@ describe('fusion Claude Code bridge', () => {
 
   test('rejects unsafe model or effort choices before any claude invocation', async () => {
     const { calls, run } = recordingRun([authResult(), reviewResult()]);
-    const tools = await toolsWith({ run });
+    const tools = toolsWith({ run });
     for (const [args, pattern] of [
       [{ packet: 'plan', model: 'gpt-5' }, /full claude-\* model id/i],
       [{ packet: 'plan', model: 'claude-opus-5 --dangerously-skip-permissions' }, /full claude-\* model id/i],
@@ -201,7 +177,7 @@ describe('fusion Claude Code bridge', () => {
       [{ packet: 'plan', effort: 'ultra' }, /effort must be one of/i],
     ]) {
       await assert.rejects(
-        tools.fusion_claude_review.execute(args, { directory: 'C:/workspace', agent: 'build' }),
+        tools.conductor_claude_review.execute(args, { directory: 'C:/workspace', agent: 'build' }),
         pattern
       );
     }
@@ -210,22 +186,22 @@ describe('fusion Claude Code bridge', () => {
 
   test('runs Claude from a neutral temporary directory, never the workspace', async () => {
     const { calls, run } = recordingRun([authResult(), reviewResult()]);
-    const tools = await toolsWith({ run });
-    await tools.fusion_claude_review.execute({ packet: 'plan' }, { worktree: 'C:/workspace', directory: 'C:/workspace', agent: 'build' });
+    const tools = toolsWith({ run });
+    await tools.conductor_claude_review.execute({ packet: 'plan' }, { worktree: 'C:/workspace', directory: 'C:/workspace', agent: 'build' });
     assert.equal(calls[0].cwd, os.tmpdir());
     assert.equal(calls[1].cwd, os.tmpdir());
   });
 
   test('refuses callers other than the build and plan agents', async () => {
     const { calls, run } = recordingRun([authResult()]);
-    const tools = await toolsWith({ run });
+    const tools = toolsWith({ run });
     for (const agent of ['sidekick', 'reviewer', 'explore', undefined]) {
       await assert.rejects(
-        tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent }),
         /only serve the build and plan agents/i
       );
       await assert.rejects(
-        tools.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent }),
+        tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent }),
         /only serve the build and plan agents/i
       );
     }
@@ -235,8 +211,8 @@ describe('fusion Claude Code bridge', () => {
   test('passes the session abort signal through to the Claude process runner', async () => {
     const { calls, run } = recordingRun([authResult(), reviewResult()]);
     const abort = new AbortController();
-    const tools = await toolsWith({ run });
-    await tools.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'plan', abort: abort.signal });
+    const tools = toolsWith({ run });
+    await tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'plan', abort: abort.signal });
     assert.equal(calls[0].signal, abort.signal);
     assert.equal(calls[1].signal, abort.signal);
   });
@@ -245,9 +221,9 @@ describe('fusion Claude Code bridge', () => {
     const { calls, run } = recordingRun([authResult()]);
     const abort = new AbortController();
     abort.abort();
-    const tools = await toolsWith({ run });
+    const tools = toolsWith({ run });
     await assert.rejects(
-      tools.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
+      tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
       /canceled/i
     );
     assert.equal(calls.length, 0);
@@ -260,25 +236,25 @@ describe('fusion Claude Code bridge', () => {
       { subscriptionType: 'api' },
       { loggedIn: false },
     ]) {
-      const tools = await toolsWith({ run: async () => authResult(invalid) });
+      const tools = toolsWith({ run: async () => authResult(invalid) });
       await assert.rejects(
-        tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
         /first-party Claude Pro or Max/i
       );
     }
-    const tools = await toolsWith({ run: async () => authResult({ authMethod: 'api_key' }) });
+    const tools = toolsWith({ run: async () => authResult({ authMethod: 'api_key' }) });
     await assert.rejects(
-      tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+      tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
       /found .*authMethod=api_key/i
     );
   });
 
   test('a failing auth check reports the exit code and redacted stderr detail', async () => {
-    const tools = await toolsWith({
+    const tools = toolsWith({
       run: async () => ({ code: 1, stdout: '', stderr: 'keychain locked for user@example.com\nsecond line' }),
     });
     await assert.rejects(
-      tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+      tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
       (error) => {
         assert.match(error.message, /exit code 1/);
         assert.match(error.message, /keychain locked/);
@@ -291,13 +267,13 @@ describe('fusion Claude Code bridge', () => {
   });
 
   test('a failing review run reports the exit code and stderr detail', async () => {
-    const tools = await toolsWith({
+    const tools = toolsWith({
       run: async (options) => options.args[0] === 'auth'
         ? authResult()
         : { code: 2, stdout: '', stderr: 'error: unknown option --frobnicate' },
     });
     await assert.rejects(
-      tools.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
+      tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
       (error) => {
         assert.match(error.message, /exit code 2/);
         assert.match(error.message, /unknown option --frobnicate/);
@@ -309,7 +285,7 @@ describe('fusion Claude Code bridge', () => {
   test('valid but non-object CLI JSON is a controlled error, not a crash', async () => {
     const nullAuth = await toolsWith({ run: async () => ({ code: 0, stdout: 'null', stderr: '' }) });
     await assert.rejects(
-      nullAuth.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+      nullAuth.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
       /unexpected JSON/i
     );
 
@@ -319,19 +295,19 @@ describe('fusion Claude Code bridge', () => {
         : { code: 0, stdout: '"PLAN_APPROVED"', stderr: '' },
     });
     await assert.rejects(
-      primitiveReview.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
+      primitiveReview.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
       /unexpected JSON/i
     );
 
     const arrayAuth = await toolsWith({ run: async () => ({ code: 0, stdout: '[]', stderr: '' }) });
     await assert.rejects(
-      arrayAuth.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+      arrayAuth.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
       /unexpected JSON/i
     );
 
     const malformed = await toolsWith({ run: async () => ({ code: 0, stdout: 'not json', stderr: '' }) });
     await assert.rejects(
-      malformed.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+      malformed.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
       /invalid JSON/i
     );
   });
@@ -341,7 +317,7 @@ describe('fusion Claude Code bridge', () => {
       run: async (options) => options.args[0] === 'auth' ? authResult() : reviewResult('Looks good'),
     });
     await assert.rejects(
-      badSignal.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
+      badSignal.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
       /required PLAN_APPROVED or PLAN_REVISE/i
     );
 
@@ -351,7 +327,7 @@ describe('fusion Claude Code bridge', () => {
         : { ...reviewResult(), stdout: JSON.stringify({ result: 'PLAN_APPROVED', modelUsage: { 'claude-sonnet-5': {} } }) },
     });
     await assert.rejects(
-      wrongModel.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
+      wrongModel.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
       /pinned claude-opus-5/i
     );
   });
@@ -364,7 +340,7 @@ describe('fusion Claude Code bridge', () => {
         : reviewResult('PLAN_APPROVED\nOk.', 'claude-opus-5'),
     });
     await assert.rejects(
-      shortName.fusion_claude_review.execute(
+      shortName.conductor_claude_review.execute(
         { packet: 'plan', model: 'claude-opus' },
         { directory: 'C:/workspace', agent: 'build' }
       ),
@@ -377,7 +353,7 @@ describe('fusion Claude Code bridge', () => {
         ? authResult()
         : reviewResult('PLAN_APPROVED\nOk.', 'claude-opus-5-20260115'),
     });
-    const output = await dated.fusion_claude_review.execute(
+    const output = await dated.conductor_claude_review.execute(
       { packet: 'plan' },
       { directory: 'C:/workspace', agent: 'build' }
     );
@@ -389,7 +365,7 @@ describe('fusion Claude Code bridge', () => {
       run: async () => ({ code: 1, stdout: '', stderr: 'rejected key sk-ant-api03-AbCdEfGh12 for user@example.com' }),
     });
     await assert.rejects(
-      authLeak.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+      authLeak.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
       (error) => {
         assert.doesNotMatch(error.message, /sk-ant-api03/);
         assert.doesNotMatch(error.message, /user@example\.com/);
@@ -404,7 +380,7 @@ describe('fusion Claude Code bridge', () => {
         : { code: 2, stdout: '', stderr: 'auth for user@example.com failed' },
     });
     await assert.rejects(
-      reviewLeak.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
+      reviewLeak.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' }),
       (error) => {
         assert.doesNotMatch(error.message, /user@example\.com/);
         assert.match(error.message, /<redacted>/);
@@ -416,11 +392,11 @@ describe('fusion Claude Code bridge', () => {
   test('a missing claude executable produces an actionable install error', async () => {
     // No injected runner: this exercises the real spawn wrapper. The empty
     // PATH directory guarantees resolution fails on every platform.
-    const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), 'fusion-claude-nobin-'));
+    const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), 'conductor-claude-nobin-'));
     try {
-      const tools = await toolsWith({ environment: { PATH: emptyBin } });
+      const tools = toolsWith({ environment: { PATH: emptyBin } });
       await assert.rejects(
-        tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
         (error) => {
           assert.match(error.message, /native build/i);
           assert.match(error.message, /npm shim/i);
@@ -436,7 +412,7 @@ describe('fusion Claude Code bridge', () => {
   // the real spawn wrapper controllable: the required file runs before node
   // parses the claude-shaped args, so it can hang or spam output on demand.
   const fakeClaudeBin = (requireSource) => {
-    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'fusion-claude-lifebin-'));
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'conductor-claude-lifebin-'));
     const fake = path.join(bin, process.platform === 'win32' ? 'claude.exe' : 'claude');
     fs.copyFileSync(process.execPath, fake);
     fs.chmodSync(fake, 0o755);
@@ -512,9 +488,9 @@ describe('fusion Claude Code bridge', () => {
     const pidfile = path.join(bin, 'status.pid');
     try {
       const abort = new AbortController();
-      const tools = await toolsWith({ environment });
+      const tools = toolsWith({ environment });
       const pending = assert.rejects(
-        tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
         /canceled/i
       );
       const pid = await readPidWhenReady(pidfile);
@@ -549,9 +525,9 @@ describe('fusion Claude Code bridge', () => {
     const { bin, environment } = fakeClaudeBin(hookSource);
     try {
       const abort = new AbortController();
-      const tools = await toolsWith({ environment });
+      const tools = toolsWith({ environment });
       const pending = assert.rejects(
-        tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
         /canceled/i
       );
       const childPid = await readPidWhenReady(path.join(bin, 'tree-child.pid'));
@@ -568,9 +544,9 @@ describe('fusion Claude Code bridge', () => {
   test('a slow auth check times out and reports the configured budget', async () => {
     const { bin, environment } = fakeClaudeBin(BLOCK_FOREVER);
     try {
-      const tools = await toolsWith({ environment, timeouts: { authMs: 1000 } });
+      const tools = toolsWith({ environment, timeouts: { authMs: 1000 } });
       await assert.rejects(
-        tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
         /timed out after 1 second/
       );
     } finally {
@@ -597,9 +573,9 @@ describe('fusion Claude Code bridge', () => {
     const pidfile = path.join(bin, 'review.pid');
     try {
       const abort = new AbortController();
-      const tools = await toolsWith({ environment });
+      const tools = toolsWith({ environment });
       const pending = assert.rejects(
-        tools.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
+        tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
         /canceled/i
       );
       const pid = await readPidWhenReady(pidfile);
@@ -613,8 +589,8 @@ describe('fusion Claude Code bridge', () => {
 
   test('sends the documented time and output budgets to the runner', async () => {
     const { calls, run } = recordingRun([authResult(), reviewResult()]);
-    const tools = await toolsWith({ run });
-    await tools.fusion_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' });
+    const tools = toolsWith({ run });
+    await tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build' });
     assert.equal(calls[0].timeoutMs, 20000);
     assert.equal(calls[0].maxOutputBytes, 64 * 1024);
     assert.equal(calls[1].timeoutMs, 600000);
@@ -622,8 +598,8 @@ describe('fusion Claude Code bridge', () => {
   });
 
   test('a Max subscription is reported as ready', async () => {
-    const tools = await toolsWith({ run: async () => authResult({ subscriptionType: 'max' }) });
-    const output = await tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' });
+    const tools = toolsWith({ run: async () => authResult({ subscriptionType: 'max' }) });
+    const output = await tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' });
     assert.match(output, /MAX/);
   });
 
@@ -646,9 +622,9 @@ describe('fusion Claude Code bridge', () => {
     ].join('\n');
     const { bin, environment } = fakeClaudeBin(spamThenBlock);
     try {
-      const tools = await toolsWith({ environment });
+      const tools = toolsWith({ environment });
       await assert.rejects(
-        tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
         /more output than the bridge allows/i
       );
     } finally {
@@ -660,12 +636,12 @@ describe('fusion Claude Code bridge', () => {
     // A copy of the node binary named claude exercises the real spawn, pipe
     // collection, and close handling: `node auth status --json` exits nonzero
     // with a module-not-found error on stderr.
-    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'fusion-claude-fakebin-'));
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'conductor-claude-fakebin-'));
     const fake = path.join(bin, process.platform === 'win32' ? 'claude.exe' : 'claude');
     fs.copyFileSync(process.execPath, fake);
     fs.chmodSync(fake, 0o755);
     try {
-      const tools = await toolsWith({
+      const tools = toolsWith({
         environment: {
           PATH: bin,
           // node.exe needs SystemRoot to boot on Windows; harmless elsewhere.
@@ -674,7 +650,7 @@ describe('fusion Claude Code bridge', () => {
         },
       });
       await assert.rejects(
-        tools.fusion_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' }),
         (error) => {
           assert.match(error.message, /exit code 1/);
           assert.match(error.message, /module|MODULE|auth/i);

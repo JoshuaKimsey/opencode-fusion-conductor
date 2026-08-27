@@ -5,7 +5,7 @@ node_modules/
 .env
 .env.local
 
-# Local machine config (not versioned; .opencode/skills/fusion-setup/ is the versioned surface)
+# Local machine config (not versioned; src/ is the versioned surface)
 opencode.json
 AGENTS.md
 test-playground/

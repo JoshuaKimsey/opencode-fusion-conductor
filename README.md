@@ -1,43 +1,59 @@
-# opencode-fusion
-
-> [!IMPORTANT]
-> **This project is no longer actively maintained.** The final maintained
-> release is v1.2.0 and targets OpenCode 1.18.x. OpenCode 2 is not supported
-> because its permission translation does not preserve Fusion's mechanical
-> guarantees. Existing releases remain available; forks and new maintainers
-> are welcome.
+# opencode-conductor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub](https://img.shields.io/badge/GitHub-JoshuaKimsey/opencode--conductor-181717?logo=github)](https://github.com/JoshuaKimsey/opencode-conductor)
 
 A minimal, working multi-model team for [opencode](https://opencode.ai): a **main agent** that plans and reviews but **cannot edit files**, delegating every change to a cheaper, faster **sidekick**. Inspired by the [Devin Fusion "sidekick" pattern](https://cognition.com/blog/devin-fusion) from Cognition.
 
-The main agent's file editing is mechanically denied. Its only way to change a file is to hand a spec to the sidekick. That keeps frontier intelligence on the decisions that matter (the plan, the interpretation of ambiguity, the review) while a cheap model does the mechanical work. Cognition reports the pattern holds frontier-level quality at roughly **35% lower cost** on their own FrontierCode benchmark, and in a July 2026 follow-up measured a Fable 5-led setup at **54% below pure Fable 5** with near-identical quality: cheaper in absolute dollars than an Opus 4.8-led setup, despite Fable's 2x per-token price.
+The main agent's file editing is mechanically denied. Its only way to change a file is to hand a spec to the sidekick. That keeps frontier intelligence on the decisions that matter (the plan, the interpretation of ambiguity, the review) while a cheap model does the mechanical work. Cognition reports the pattern holds frontier-level quality at roughly **35% lower cost** on their own FrontierCode benchmark, and in a July 2026 follow-up measured a Fable 5-led setup at **54% below pure Fable 5** with near-identical quality.
 
-The main pair is backed by read-only helpers (**explore**, **research**) and optional specialists (**design**, **reviewer**, **vision**), each on a model you choose. See the [full team](#how-it-works).
+This is a **rewrite of [opencode-fusion](https://github.com/mihneaptu/opencode-fusion) as a real opencode plugin**: the same mechanically enforced main/sidekick split, but distributed as a one-line npm plugin install instead of a file-based skill bundle. If you are coming from opencode-fusion, see [Migration from opencode-fusion](#migration-from-opencode-fusion).
 
-[Quick start](#quick-start) • [How it works](#how-it-works) • [Setup](#setup) • [Customize](#customize) • [FAQ](#faq) • [Troubleshooting](#troubleshooting)
+[Quick start](#quick-start) • [How it works](#how-it-works) • [Configuration](#configuration) • [Enforced vs. advised](#enforced-vs-advised) • [Profiles](#profiles) • [Migration from opencode-fusion](#migration-from-opencode-fusion) • [OpenCode 2 status](#opencode-2-status-and-known-flake) • [Development](#development)
 
-## Demo
-
-https://github.com/user-attachments/assets/6d9e96e2-654a-4bc4-82af-3c3f1a8bde91
-
-One full delegation cycle in 38 seconds: the main agent plans, hands a spec to the sidekick, reviews the returned diff, and verifies the result, without ever touching a file itself.
+> [!NOTE]
+> **Fork and attribution.** This project is forked from
+> [mihneaptu/opencode-fusion](https://github.com/mihneaptu/opencode-fusion)
+> (archived August 24, 2026; final release v1.2.0) and rebranded to a scoped
+> npm plugin named `@joshuakimsey/opencode-conductor`. The "Devin Fusion
+> pattern" framing and its permission-layer enforcement come from Cognition.
+> All three are credited below.
 
 ## Quick start
 
-Install the setup skill globally, then let opencode configure everything conversationally:
+Add one line to your opencode config (`~/.config/opencode/opencode.json`, or a
+project-level `opencode.json`):
 
-```bash
-npx skills add mihneaptu/opencode-fusion --skill fusion-setup -g -a opencode -y
+```json
+{
+  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]]
+}
 ```
 
+Then fully quit and restart opencode. opencode auto-installs npm plugins via
+Bun at startup, so there is no skill, no installer, and no interview. The
+plugin injects the agent team and the `/conductor` command on the next launch.
+
+That is the whole install. **Uninstall** by removing the line and restarting.
+
+To verify it is working, open a project with some lint errors and ask:
+
 ```
-set up fusion
+fix the lint errors in this project
 ```
 
-The installer needs **Node 20.12 or newer**. On older Node (including Ubuntu's apt default) it crashes with a `styleText` error; [Troubleshooting](#troubleshooting) has three workarounds. The skill interviews you for a model per role, writes the global config, installs the agent prompts, and tells you when to restart. On a subscription (OpenCode Go/Zen, ChatGPT, or GitHub Copilot)? Name it and the skill starts from a ready-made [profile](#subscription-profiles) instead of asking per role. Manual setup and provider examples live in [Setup](#setup).
+You should see the main agent delegate exploration, receive the findings, make
+a plan, then delegate execution to the sidekick via the `task` tool. The
+sidekick makes the edits, and the main agent verifies by running the project's
+lint or test command itself before reporting back.
 
-That command tracks `main`. To install an exact release instead, add the tag: `npx skills add mihneaptu/opencode-fusion#v1.2.0 --skill fusion-setup -g -a opencode -y`. Released versions are listed on the [changelog](https://mihneaptu.github.io/opencode-fusion/changelog.html).
+> [!NOTE]
+> Along the way you may see the occasional command struck through with a
+> permission error (for example the agent trying `git ls-files`). That is not a
+> bug. The main and plan agents run bash deny-by-default, so anything outside
+> their short allowlist is mechanically blocked, and the agent recovers on its
+> own by reading the file or delegating the search. A denied command is the
+> guardrail working, not the setup failing.
 
 ## Why it works
 
@@ -57,18 +73,80 @@ This repo turns that into a hard constraint: the main agent's edit, search, and 
 
 The diagram shows one delegation cycle: the main agent delegates exploration, plans from what comes back, hands the sidekick a spec, reviews the returned diff, loops until it passes, then delivers the result.
 
-| Agent | Role | Config key | Required | Suggested model (2026) |
-|-------|------|------------|----------|------------------------|
-| `build` | Main: plan, delegate, review | `agent.build.model` | core | `claude-opus-5` |
-| `plan` | Plan mode: same brain as build, plans but does not execute | `agent/plan.md` (file) | core | reuses main model |
-| `sidekick` | Execute edits and commands | `agent.sidekick.model` | core | `grok-4.5` |
-| `explore` | Fast read-only exploration (opencode's built-in agent; no prompt file) | `agent.explore.model` | core | `deepseek-v4-flash` |
-| `research` | Read-only external research (web, docs) | `agent.research.model` | optional | `claude-sonnet-5` |
-| `design` | Frontend/UI implementation | `agent.design.model` | optional | `kimi-k3` |
-| `reviewer` | Critique a plan before implementation; audit a diff before commit | `agent.reviewer.model` | optional | `gpt-5.6-sol` |
-| `vision` | Transcribe images the main model cannot see | `agent.vision.model` | optional | `gemini-3.6-flash` |
+The team below is injected by the plugin at startup. Models are resolved per role from the selected profile, with per-role overrides possible (see [Configuration](#configuration)). The suggested models are the 2026 defaults from the `opencode-go` profile; they are starting points, not requirements.
 
-Models move fast. Treat these as 2026 starting points, not requirements. Use any provider you like; in config each model is written as `provider/model-id` (for example `openai/gpt-5.6-sol`), and the sidekick should stay cheaper and faster than the main agent. The mix above spans several vendors on purpose, so the main agent's review of each sidekick diff is cross-vendor. If a subscription covers your models, a [profile](#subscription-profiles) fills this table in for you.
+| Agent | Role | Type | Suggested model (2026) |
+|-------|------|------|------------------------|
+| `build` | Main: plan, delegate, review | primary (restricted) | `opencode-go/kimi-k3` |
+| `plan` | Plan mode: same brain as build, plans but does not execute | primary | `opencode-go/kimi-k3` |
+| `sidekick` | Execute edits and commands | subagent | `opencode-go/deepseek-v4-flash` |
+| `explore` | Fast read-only exploration (opencode's built-in agent; model-only) | subagent | `opencode-go/deepseek-v4-flash` |
+| `research` | Read-only external research (web, docs) | subagent | `opencode-go/kimi-k2.7-code` |
+| `design` | Frontend/UI implementation | subagent | `opencode-go/kimi-k3` |
+| `reviewer` | Critique a plan before implementation; audit a diff before commit | subagent | `opencode-go/grok-4.5` |
+| `vision` | Transcribe images the main model cannot see | subagent (hidden) | unset by default |
+
+`build` and `plan` are the primaries. `build` is the restricted main agent: `edit`, `grep`, `glob`, and `list` are denied, bash is deny-by-default with a verification + git allowlist, and `git commit`/`git push` require user approval. `sidekick` is the executor. `explore` is opencode's built-in read-only agent - the plugin only assigns it a model, never a full definition. `research`, `design`, `reviewer`, and `vision` are optional specialists; a profile (or a `models` override) decides which get a model.
+
+`subagent_depth` is floored to 2 so the sidekick can delegate read-only lookups to explore or research.
+
+Models move fast. Treat these as 2026 starting points, not requirements. Use any provider you like; in config each model is written as `provider/model-id` (for example `opencode-go/deepseek-v4-flash`), and the sidekick should stay cheaper and faster than the main agent. The mix above spans several vendors on purpose, so the main agent's review of each sidekick diff is cross-vendor.
+
+## Configuration
+
+All plugin options live in the plugin entry of your `opencode.json`:
+
+```json
+{
+  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]]
+}
+```
+
+| Option | Type | Default | Meaning |
+|--------|------|---------|---------|
+| `profile` | string | none | One of `chatgpt`, `github-copilot`, `opencode-go`, `opencode-zen`, `opencode-zen-free`. Fills in per-role models from a subscription profile. |
+| `models` | object | none | Per-role model overrides as `role -> "provider/model-id"`. Roles: `build`, `plan`, `sidekick`, `explore`, `research`, `design`, `reviewer`, `vision`. Overrides win per role over the profile. |
+| `audit` | boolean | `false` | Enables the `conductor-audit` event hook, which logs the delegation tree and per-agent token usage. |
+| `claude` | boolean | `false` | Enables the Claude Code bridge tools `conductor_claude_status` / `conductor_claude_review`. Requires Claude Pro/Max CLI installed and authenticated. |
+
+Examples:
+
+```jsonc
+// Use a subscription profile, then override one role.
+{
+  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", {
+    "profile": "opencode-go",
+    "models": { "sidekick": "opencode-go/deepseek-v4-flash" },
+    "audit": true
+  }]]
+}
+```
+
+```jsonc
+// Add the Claude Code plan-review bridge.
+{
+  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", {
+    "claude": true
+  }]]
+}
+```
+
+### The `/conductor` slash command
+
+The plugin injects a `/conductor` command that reports or edits the plugin's own options atomically (a rolling backup is written to `opencode.json.conductor-backup` before any change).
+
+- **No arguments** -> `conductor_status`, a read-only report: where the plugin entry lives, its raw options, the effective role -> model resolution, leftover fusion-install hazards, and the pinned plugin version.
+- **With arguments** -> `conductor_configure` edits the plugin's options in `opencode.json`. Supported forms:
+  - role=model pairs: `/conductor sidekick=opencode-go/deepseek-v4-flash explore=opencode-go/deepseek-v4-flash`
+  - a profile: `/conductor profile chatgpt`
+  - flags: `/conductor audit=true claude=true`
+
+> [!IMPORTANT]
+> **Model changes require a restart on opencode 1.18.x.** The agent registry is
+> materialized at startup, so the plugin's injected agents (and their model
+> assignments) only take effect on the next launch. The `/conductor` command
+> edits the config and always tells you to restart. This is a platform
+> limitation, not a bug in the plugin.
 
 ## Enforced vs. advised
 
@@ -80,43 +158,26 @@ The pattern's guarantees live in two different layers, and being precise about w
 - Its bash is deny-by-default with a short verification and git allowlist, so file-writing commands are blocked. `git commit` and `git push` additionally require per-command user approval; common direct force/mirror/delete/prune forms are denied by later rules.
 - Direct `git commit` and `git push` invocations plus common Git wrapper forms are denied for the sidekick and design agents, making review-then-commit the normal enforced path.
 - Delegation is bounded by an explicit `task` allowlist: the main agent reaches only its named specialists, and the sidekick can spawn only read-only searchers.
+- The `conductor_configure` and `conductor_status` tools serve only the build and plan agents; the plugin grants them to those two and denies them everywhere else.
 
 If the main agent "won't delegate," the result is visible inaction: nothing on disk changes. The failure mode is never a silent bypass.
 
-**Advised: the prompt layer.** Spec precision, diff-review rigor, cost discipline, parallelization, and skill usage are instructions in the agent prompts. opencode loads skills at the model's discretion (nothing can force an agent to read or apply one), which is exactly why no guarantee here depends on them; the skill in this repo is just the installer. If the model slacks at this layer, the cost is quality or wasted tokens, never an unauthorized edit.
+These are the same permission maps the final opencode-fusion release injected, ported verbatim. The guarantee is enforced live against a real opencode binary with plugin-injected agents in `test/integration`.
+
+**Advised: the prompt layer.** Spec precision, diff-review rigor, cost discipline, parallelization, and skill usage are instructions in the agent prompts. opencode loads skills at the model's discretion (nothing can force an agent to read or apply one), which is exactly why no guarantee here depends on them. If the model slacks at this layer, the cost is quality or wasted tokens, never an unauthorized edit.
 
 **Not guaranteed: the threat model.** The permission layer bounds which tools each agent can call. It is not a sandbox, and it is worth being precise about what it does not protect:
 
 - The `.env` denies on the executors stop the common accidental read (`cat .env` landing a key in a transcript), not a determined one. An agent with broad bash has many equivalent ways to read a file or the process environment, so treat those rules as accidental-leak prevention, not secret isolation. The `{env:VAR}` config syntax keeps keys out of plaintext config and out of the chat; it does not hide them from the environment agents run in.
 - Git command rules match command text and are defense-in-depth, not a shell sandbox: wrappers, alternate executables, or obfuscation can bypass a finite pattern list when an executor has broad bash. They protect against common accidental commits and destructive pushes, not a hostile process. Editing files is the sidekick's job, and catching a wrong edit is what the main agent's diff review (and the optional reviewer) are for.
-- The design agent is the one role granted `skill: allow`, because its prompt cannot do its job without loading a design skill. That skips opencode's per-use approval prompt and overrides a global `skill` deny. A skill is instructions the model then follows, so treat your installed skill set as trusted input on the same footing as your prompts. The agent already holds `edit` and broad bash, so this grants no capability it lacked; its prompt's refusal to fetch external skill catalogs is the advised layer, not the enforced one. Every other agent keeps opencode's default, so a global deny still applies to them.
-- The design agent's path-aware opencode tools are fenced to the workspace (`external_directory: deny`), but processes launched through broad bash are not OS-sandboxed by that rule. The sidekick keeps opencode's default `ask` for paths outside the project, because setup and reconfigure legitimately write the global config. Note that `--auto` mode auto-approves `ask` rules, so use external sandboxing too if an executor must never leave the repo.
+- The design agent is the one role granted `skill: allow`, because its prompt cannot do its job without loading a design skill. That skips opencode's per-use approval prompt and overrides a global `skill` deny. A skill is instructions the model then follows, so treat your installed skill set as trusted input on the same footing as your prompts. The agent already holds `edit` and broad bash, so this grants no capability it lacked. Every other agent keeps opencode's default, so a global deny still applies to them.
+- The design agent's path-aware opencode tools are fenced to the workspace (`external_directory: deny`), but processes launched through broad bash are not OS-sandboxed by that rule. The sidekick keeps opencode's default `ask` for paths outside the project. Note that `--auto` mode auto-approves `ask` rules, so use external sandboxing too if an executor must never leave the repo.
 
-**Auditable: verify instead of trusting.** The optional [`fusion-audit` plugin](#slash-commands-and-optional-plugins) logs the delegation tree, and opencode's session DB records every agent's actual tool calls (`opencode db path` prints its location, typically `~/.local/share/opencode/opencode.db`). "Did it really delegate?" is checkable ground truth, not vibes.
+**Auditable: verify instead of trusting.** The optional `audit` option enables a hook that logs the delegation tree and aggregates per-agent token usage, and opencode's session DB records every agent's actual tool calls (`opencode db path` prints its location, typically `~/.local/share/opencode/opencode.db`). "Did it really delegate?" is checkable ground truth, not vibes.
 
-## Setup
+## Profiles
 
-Fusion lives entirely in your **global** opencode config at `~/.config/opencode/` (Windows: `%USERPROFILE%\.config\opencode\`). There is no build step and nothing to clone into your projects.
-
-### Recommended: let opencode set it up
-
-This repo ships a skill, `fusion-setup`, that configures everything conversationally. Install it globally (Node 20.12+):
-
-```bash
-npx skills add mihneaptu/opencode-fusion --skill fusion-setup -g -a opencode -y
-```
-
-Or copy the `fusion-setup` folder from this repo's `.opencode/skills/` into `~/.config/opencode/skills/`. Skills are discovered on demand; no restart is needed to pick one up. Then say:
-
-```
-set up fusion
-```
-
-It asks which model and provider you want for each role, writes `~/.config/opencode/opencode.json`, installs the agent prompts under `~/.config/opencode/agent/`, and tells you to restart. The mechanical steps (timestamped backup, config merge, atomic write, file copies, validation, and undo) run through a small deterministic script bundled with the skill, so the sensitive part of setup does not depend on model compliance. To change models later, say "reconfigure fusion" or edit the config directly (see [Customize](#customize)); "undo fusion" restores the recorded backup and removes exactly what was installed.
-
-### Subscription profiles
-
-If your models come from a subscription, skip the per-role interview: name the subscription during setup (or run `/fusion-setup opencode-go`) and the skill applies a bundled profile: a ready-made role-to-model mapping the installer merges like any other config fragment. Directly: `node <skill-dir>/scripts/install.js apply --profile <name> --extras commands,plugin`.
+If your models come from a subscription, set the `profile` option and the plugin fills in a ready-made role-to-model mapping. Authentication stays out-of-band: connect the provider once with `opencode auth login` (or `/connect` inside opencode). Profiles contain no keys, adapters, or endpoints (opencode knows these providers natively).
 
 | Profile | Subscription | Main / sidekick | Beyond the core roles |
 |---------|--------------|-----------------|-----------------------|
@@ -126,367 +187,62 @@ If your models come from a subscription, skip the per-role interview: name the s
 | `chatgpt` | ChatGPT Plus or Pro | GPT-5.6 Sol / GPT-5.6 Luna | reviewer |
 | `github-copilot` | GitHub Copilot | Claude Sonnet 5 / GPT-5.6 Luna | research, reviewer |
 
-Authentication stays out-of-band: connect the provider once with `opencode auth login` (or `/connect` inside opencode). Profiles contain no keys, adapters, or endpoints (opencode knows these providers natively), and the skill never asks for a key in chat. To adjust a pick, keep the profile and add a small override fragment (`--profile <name> --config <delta.json>`; your fragment wins on conflicts).
+To adjust a pick, keep the profile and add a per-role `models` override - the override wins for that role. Subscription lineups rotate; `npm run check-profiles` verifies every shipped id against [models.dev](https://models.dev).
 
-Five notes. `opencode-zen-free` includes a `vision` role because its main model cannot read images; the other profiles lead with models that read images directly. `opencode-zen-free` runs on free-period models (Big Pickle is a stealth model). OpenCode's policy allows prompts to be used for training while a model is free, so keep sensitive code off this profile. The single-vendor `chatgpt` profile keeps every role on one vendor - its reviewer runs a different model (GPT-5.6 Terra) than the main agent, but a user with a second provider still gets a stronger check by overriding the reviewer across vendors; `github-copilot` defaults to Claude Sonnet 5 as the main for credit-cost sanity; override `agent.build.model` to `github-copilot/claude-opus-5` if you want max quality and accept the burn rate. `opencode-go` leads with Kimi K3, the tightest model in that lineup: Go meters in dollars, so K3's share of the cap works out to roughly 110 requests per 5h against GLM 5.2's 880 - point `agent.build.model` at `opencode-go/glm-5.2` if you hit that. There is no Claude Pro/Max provider profile: a Claude subscription login cannot be placed in `opencode.json` or exposed as `agent.build.model`. The optional bridge below can ask the official Claude Code CLI for a constrained plan review. Subscription lineups rotate; `npm run check-profiles` verifies every shipped id against [models.dev](https://models.dev), and CI runs it on each push.
+## Migration from opencode-fusion
 
-### Optional Claude Pro/Max plan review
+If you previously installed [opencode-fusion](https://github.com/mihneaptu/opencode-fusion) (the file-based skill bundle), migrate as follows:
 
-The `claude` installer extra adds a small OpenCode plugin that invokes the official Claude Code CLI. It gives the Fusion build and plan agents two custom tools: `fusion_claude_status` and `fusion_claude_review`. Claude receives only the self-contained plan packet that Fusion sends. It cannot inspect the workspace, use tools, edit files, continue the session, or become the main model.
+1. **Undo the old install.** Say `undo fusion` with the old fusion-setup skill, or run its installer's undo, to remove the file-based agents and prompts it installed under `~/.config/opencode/`. This restores `opencode.json` to its pre-fusion state and deletes the agent `.md` files that would otherwise override the plugin's injected agents.
+2. **Add the plugin line** to `~/.config/opencode/opencode.json` as in [Quick start](#quick-start).
+3. **Restart opencode.**
 
-1. [Install Claude Code](https://code.claude.com/docs/en/setup) and run `claude auth login` yourself with a Pro or Max account. On Windows use the native build (the installer script or `claude install`): the bridge launches `claude` without a shell, which the npm `claude.cmd` shim does not support.
-2. Run the Fusion installer with your normal OpenCode profile or config and add the extra: `--extras commands,plugin,claude`.
-3. Fully quit and restart OpenCode. Ask Fusion to check `fusion_claude_status`, or say: "Have Claude review the plan before implementation."
+The leftover file-based agents are a hazard because they override the plugin-injected agent config field-by-field. `conductor_status` (run `/conductor` with no arguments) checks for leftover fusion files and warns you if any are detected.
 
-The plugin never reads or copies Claude's stored OAuth token. Before every review it checks for a first-party Pro/Max login, removes API-key and alternate-provider routing from the Claude process, defaults to `claude-opus-5` at high effort (the review tool accepts an optional full `claude-*` model id and an effort of low/medium/high/xhigh/max per call), uses [Claude Code print mode](https://code.claude.com/docs/en/cli-usage), disables tools and customizations, and turns off session persistence. Reviews run from a neutral temporary directory rather than your workspace, and the tools refuse any caller other than the build and plan agents at runtime, so even a hand-copied plugin without the installer's global deny serves no other agent. OpenCode denies these tools globally and grants them only to the build and plan agents through [custom-tool permissions](https://opencode.ai/docs/agents/).
+The `claude` and `audit` options fold in what the old `fusion-claude` plugin and `fusion-audit` plugin provided, so there is no separate plugin to install.
 
-This remains an optional third-party integration. [Anthropic says](https://support.claude.com/en/articles/13189465-log-in-to-your-claude-account) subscription usage is designed for its native applications, including Claude Code, and that some third-party-tool access may be allowed at its discretion or charged to usage credits. The bridge does not misrepresent itself or convert OAuth into an API credential, but it is not a promise that subscription access or billing behavior will never change.
+## OpenCode 2 status and known flake
 
-<details>
-<summary><b>Manual setup</b> (configure the JSON by hand)</summary>
+This plugin targets **opencode 1.18.x**, the same version opencode-fusion's final release targeted.
 
-Write `~/.config/opencode/opencode.json` yourself. Pick your own models; the structure is what matters. The JSON only assigns each role its model. The mechanical core of Fusion (the build agent's `edit: deny` and bash allowlist) lives in the agent files you install below, and must not be loosened.
+**OpenCode 2 is not supported.** OpenCode 2 is beta; its plugin API differs from 1.18.x, and its permission enforcement is call-time rather than schema-removal - which means a denied `edit` tool can still be offered and then rejected at call time, breaking the mechanical guarantee this plugin relies on (that denied tools are absent from the agent's tool schema). A v2 port is planned but not shipped.
 
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "subagent_depth": 2,
-  "model": "<main-provider>/<main-model-id>",
-  "provider": {
-    "<your provider blocks here>": {}
-  },
-  "agent": {
-    "build": { "model": "<main-provider>/<main-model-id>" },
-    "explore": { "model": "<explore-provider>/<explore-model-id>" },
-    "sidekick": { "model": "<sidekick-provider>/<sidekick-model-id>" }
-  }
-}
-```
+**Known upstream flake.** On rare first delegation, a config-hook/agent-registry race in opencode ([anomalyco/opencode#30955](https://github.com/anomalyco/opencode/issues/30955)) can surface; a retry of the delegation resolves it.
 
-The specialists are optional and a-la-carte. To add one, give it a model entry in the `agent` block alongside `explore`/`sidekick`, for example `"reviewer": { "model": "<provider>/<model-id>" }`, and install its prompt file. Their prompts and permissions live in the skill bundle: `.opencode/skills/fusion-setup/agent/` holds `research.md`, `design.md`, `reviewer.md`, and `vision.md`. Add `vision` only if your main model cannot read images. Plan mode uses `agent/plan.md` and reuses the main model. `explore` is the one role with no prompt file: it is opencode's built-in read-only subagent, so it gets a model entry in the JSON and nothing else; there is intentionally no `agent/explore.md` in this repo.
+## Development
 
-Then install the agent files. opencode auto-loads every markdown file in `~/.config/opencode/agent/` as an agent definition. The frontmatter carries the role's mode and permissions (this is where the edit denial is mechanically enforced), and the body is its prompt:
+From the repository root:
 
 ```bash
-mkdir -p ~/.config/opencode/agent
-cp .opencode/skills/fusion-setup/agent/{build,plan,sidekick}.md ~/.config/opencode/agent/
+npm test                 # unit + consistency suites
+npm run test:integration # live integration: real opencode on PATH (CONDUCTOR_INTEGRATION=1)
+npm run check-profiles   # verify profile model ids against models.dev (needs network)
+npm run build:changelog  # regenerate site/changelog.html from CHANGELOG.md
 ```
 
-Model references are always `provider-id/model-id`. If a model uses a provider opencode does not know yet, add a `provider` block for it (see the OpenAI-compatible template in the `fusion-setup` skill).
-
-> [!IMPORTANT]
-> Restart opencode after writing the config; it loads config once at startup, not mid-session.
-
-</details>
-
-<details>
-<summary>Example provider: Grok as the sidekick via progrok</summary>
-
-Any provider works, but if you want to use xAI's Grok Composer as the fast sidekick model, [progrok](https://github.com/lidge-jun/progrok) turns a SuperGrok OAuth session into a local OpenAI-compatible endpoint:
-
-```bash
-npm install -g progrok
-progrok login        # browser OAuth with your xAI account
-progrok proxy        # leave this running in a terminal
-```
-
-The proxy serves at `http://127.0.0.1:18645/v1`. Point a provider block at that baseURL with any placeholder apiKey; progrok injects your real OAuth token before forwarding to xAI.
-
-</details>
-
-## Verify it works
-
-Open a project with some lint errors and ask:
-
-```
-fix the lint errors in this project
-```
-
-You should see the main agent delegate exploration, receive the findings, make a plan, then delegate execution to the sidekick via the `task` tool. The sidekick makes the edits, and the main agent verifies by running `npm run lint` itself before reporting back.
-
-> [!NOTE]
-> Along the way you may see the occasional command struck through with a permission error (for example the agent trying `git ls-files`). That is not a bug. The main and plan agents run bash deny-by-default, so anything outside their short allowlist is mechanically blocked, and the agent recovers on its own by reading the file or delegating the search. A denied command is the guardrail working, not the setup failing.
-
-## Customize
-
-### Swap models
-
-All agent models live in one place: `~/.config/opencode/opencode.json` under `agent`, one `model` value per agent (keys and suggested models are in the [table above](#how-it-works)).
-
-Change the value, add a `provider` block if the model uses a new provider, and restart opencode. For a persistent default main model, also update the top-level `model` field. The sidekick should stay cheaper and faster than the main agent when possible.
-
-Editing this file by hand is fine and loses nothing, but the installer records a hash of what it wrote, so the next reapply refuses once to make the mismatch visible. Re-run it with `--adopt-config` to accept your edited file as the new baseline; the fragment still merges into your current file rather than replacing it, and `undo` still restores the true pre-Fusion state. Reaching for "reconfigure fusion" instead keeps the manifest accurate without that step.
-
-> [!WARNING]
-> Do not add a `model:` line to the agent `.md` files themselves: frontmatter overrides `opencode.json` on any key it sets, so a model baked in there would silently win over your config.
-
-> [!TIP]
-> Run `/models` in opencode to swap the active model for the current session only.
-
-### Adjust the bash allowlist
-
-The main agent's bash is allowlisted to verification and git commands (`npm run lint`, `npm test`, `git diff`, `git status`, `git log`, `git show`, `git add`); `git commit` and `git push` prompt for per-command approval, and force/mirror/delete-ref pushes are denied. Edit the installed `~/.config/opencode/agent/build.md` to add or remove allowed commands in the `permission.bash` section. Keep `"*": "deny"` first so unlisted commands are blocked by default, and keep the specific push denies *after* `"git push*"`; opencode resolves overlapping patterns by last-match-wins. Note that the allowlist matches each command in a chained line separately and denies the call if any one of them fails to match, so a chain is only as allowed as its least-allowed segment. `git status && git log` runs when both are allowlisted; `git status | head` does not, because the pipe consumer counts as its own command and `head` is not on the list. The agent prompts tell the agents to run one command per call anyway, so a denial names the command that caused it.
-
-> [!IMPORTANT]
-> **The shipped verification commands assume a Node/JavaScript project.** The
-> git half of the allowlist is universal, but the JS entries only exist in a JS
-> toolchain. On any other stack the main agent cannot run your tests, and you
-> will see it denied on the command you expect it to use.
->
-> Each role ships its own subset, so check the file you are editing rather than
-> assuming all three match:
->
-> | Entry | `build.md` | `plan.md` | `reviewer.md` |
-> |---|---|---|---|
-> | `"npm run lint*"` | yes | yes | yes |
-> | `"npm test*"` | yes | yes | yes |
-> | `"npx vitest run*"` | yes | yes | yes |
-> | `"npx tsc --noEmit*"` | yes | yes | no |
-> | `"npm run build*"` | yes | no | no |
->
-> (`build.md` also allows `"npm --version*"`, a read-only probe that needs no
-> per-stack equivalent.)
->
-> Replace the entries the file actually has, keeping `"*": "deny"` first. These
-> name the tool per stack; the exact pattern is yours to write, and the next
-> paragraph is the part that matters:
->
-> | Stack | Verification tools |
-> |---|---|
-> | Python | `pytest`, `ruff check`, `mypy` |
-> | Rust | `cargo test`, `cargo clippy`, `cargo check` |
-> | Go | `go test`, `go vet` |
-> | Make-driven | `make test`, `make lint` |
->
-> **Prefer an exact pattern over a trailing `*`.** A trailing `*` matches the
-> entire rest of the command, so `"ruff check*"` also permits
-> `ruff check --fix` and `ruff check --add-noqa`, both of which rewrite your
-> source. `"go test*"` permits `-o`, `-exec`, and the `-coverprofile` family,
-> all of which write files. Enumerating those flags as denies is a losing game -
-> every tool keeps adding more. If you can pin the command your project actually
-> runs (`"pytest"`, `"make test"`, `"cargo test --workspace"`), do that and skip
-> the wildcard. Reach for `*` only where you genuinely need to pass varying
-> paths, and then read your tool's flag list before you paste it.
->
-> Denies narrow an allow you cannot avoid making broad, the way the shipped list
-> denies `npm run lint --fix` and `npx vitest run -u`. Put each deny *after* the
-> allow it narrows: opencode resolves overlapping patterns by last-match-wins,
-> so a deny above its allow is silently overridden. Treat the deny as a
-> backstop, not the primary control - the tight allow is the control.
->
-> The shipped JS entries are that unavoidable case, which is why they look like
-> the thing this section tells you to avoid. `npm test` and `npm run lint` take
-> project-specific arguments (a path, `--workspace`, a `-t` filter), so pinning
-> them exactly would deny the run you actually want; the trailing `*` stays and
-> the denies below it carry the weight. Where your own command takes no varying
-> arguments, you get the tighter option and should use it.
->
-> **Keep the commands read-only or idempotent.** The point is that the main
-> agent can verify without being able to mutate, so a formatter that rewrites
-> files (`ruff format`, `cargo fmt`, `gofmt -w`) belongs with the sidekick, not
-> here. For the same reason `go build` and a `build` Make target are absent
-> above: `go build` writes an executable, and a Make recipe does whatever the
-> project defined it to do - a `test` target that regenerates fixtures is a
-> write, whatever it is called. Read the recipe before allowing it.
->
-> One more thing worth knowing: these prompts install globally to
-> `~/.config/opencode/agent/`, not per project. If you work across several
-> stacks with one opencode install, add your stack's entries alongside the JS
-> ones instead of replacing them - otherwise the next Node project you open
-> cannot verify itself.
-
-> [!NOTE]
-> Editing an installed prompt makes it yours. The installer records a hash of every file it writes, and a reapply refuses rather than overwrite a file that changed - deliberately, so your customization is never silently clobbered. There is no `--adopt` override for prompts (unlike `opencode.json`). To hand the file back to the installer, restore the bundled copy from `.opencode/skills/fusion-setup/agent/` first. Keep a note of your edit either way, since a reapply that does succeed installs the bundled version.
-
-<details>
-<summary><b>Depth requirement and optional hardening</b></summary>
-
-`"subagent_depth": 2` (top level) is required when sidekick delegates a read-only lookup to explore or research. OpenCode 1.18.2+ defaults to `1`, which allows the main agent to start sidekick but blocks that nested helper call. The Fusion installer sets a minimum of `2` and preserves larger existing values.
-
-The remaining documented keys make a local Fusion setup cheaper, more private, and more deterministic. They are optional:
-
-- `"small_model": "<provider>/<cheap-model>"` (top level): opencode runs background tasks like session-title generation on a small model; if you do not set this it can fall back to a remote default. Pin it to one of your own cheap local models to keep everything on your providers.
-- `"enabled_providers": ["..."]` (top level): allowlist the providers opencode loads, so a stray credential elsewhere cannot add models to the picker.
-- `"compaction": { "prune": true }` (top level): drops stale tool outputs when compacting, cutting main-agent token cost in a delegation-heavy flow.
-- `"limit": { "context": <n>, "output": <n> }` (inside a custom model block): lets opencode track remaining context for models not on models.dev, such as local gateways. Use the model's real window; do not guess.
-- Sidekick bash denylist: the sidekick has broad `bash`, but its prompt frontmatter denies direct `git commit`/`git push` and common wrapper forms (committing is the main agent's job, after review), blocks common `.env` reads, and asks before `git reset --hard`, `git clean`, and `rm -rf` (plus their PowerShell/cmd equivalents: `Remove-Item -Recurse`/`-Force`, `rd /s`, `del /s`). These are defense-in-depth command guards, not process isolation.
-
-</details>
-
-## Uninstall
-
-Say `undo fusion`, or run the bundled installer directly:
-
-```bash
-node <skill-dir>/scripts/install.js undo
-```
-
-It restores `opencode.json` to its exact pre-install bytes, removes only the files Fusion created, restores any it replaced, and keeps every backup. If you hand-edited an installed prompt or the config afterwards, it refuses and names the conflict rather than overwriting your work. Restart opencode when it finishes.
-
-Undo is all or nothing - there is no switch that suspends Fusion for a session. And since `build` and `plan` replace opencode's built-in primaries, out of the box there is no unrestricted primary to fall back to either.
-
-### Escape hatch
-
-If you want one, create `~/.config/opencode/agent/normal.md`:
-
-```markdown
----
-description: Unrestricted primary - plain opencode, no Fusion permissions
-mode: primary
----
-
-You are a standard opencode agent with no delegation requirements.
-```
-
-Restart once, then `Tab` cycles through the primary agents mid-session. Leave out the `model` key and it follows your top-level default. The installer never manages this file, so `undo` and reapply leave it alone.
-
-This does not weaken the split: switching primaries is a keybind you press, not a tool the main agent can call. Two caveats:
-
-- **No guardrails at all**, not just no delegation. It inherits opencode's defaults, so destructive shell commands the sidekick would ask about run without a prompt.
-- **The transcript is shared between primary agents.** After switching, the new agent reads earlier turns as its own - expect `build` to apologise for a direct edit the escape hatch made. Start a fresh session if that matters.
-
-## Limitations
-
-- **No dynamic mid-session routing.** Devin Fusion's second technique, swapping the active model mid-task during context compaction, needs Devin's closed product surface and is not possible in opencode. This repo implements the sidekick pattern only; model assignments are fixed per role at startup. It is an explicit non-goal, not a missing feature.
-- **Config loads at startup.** opencode reads config once when it launches. Any change to `opencode.json` or an agent prompt requires a full restart to take effect.
-- **Loop protection has two layers.** `subagent_depth: 2` caps Fusion at the required main -> executor -> read-only helper chain. The `task` permission graph independently controls which named agents each role may launch, so allowing the second level does not expose arbitrary subagents.
-- **Targets OpenCode 1.18.x only.** The final maintained release was verified
-  against OpenCode 1.18.x. OpenCode 2 is not supported: its beta compatibility
-  translation exposed a denied `edit` tool to the plan agent, so Fusion's
-  mechanical permission guarantee does not hold. Do not use this bundle with
-  OpenCode 2.
-
-## FAQ
-
-<details>
-<summary><b>What happens when the sidekick can't satisfy the spec?</b></summary>
-
-The main agent's prompt carries an explicit escalation ladder, so the retry loop always terminates:
-
-1. **First miss:** re-delegate with feedback naming the specific problem.
-2. **Second miss:** stop describing and start dictating. The main agent authors the exact patch itself (file, line range, verbatim code) and hands it over to apply. Applying a verbatim patch needs no judgment, so this ends the capability question: the sidekick becomes a pair of hands. You lose the cost saving on that one task, but you cannot deadlock.
-3. **Dictated patch still fails verification:** the plan is wrong, not the sidekick, and the main agent revises the plan. It reports a blocker only when verification fails for reasons outside the code (broken environment, flaky tests), with the real command output attached.
-
-The mechanical block is on the main agent's *tools*, not on the content of its specs. Dictating an exact diff was always within the rules; the prompt makes it an explicit step instead of an emergent discovery.
-
-The ladder assumes the sidekick *answers*. If its provider is down or out of quota, no rung helps: the main agent has no path to disk at all, and the outcome is a reported blocker. Repoint `agent.sidekick.model` and restart, or use the [escape hatch](#escape-hatch) to keep moving in that session.
-
-</details>
-
-<details>
-<summary><b>What if the agents ignore the prompts, or never load the skills?</b></summary>
-
-You lose quality, not guarantees; see [Enforced vs. advised](#enforced-vs-advised). Delegation is not a behavior the main agent chooses: its edit and search tools are removed from its tool schema at the permission layer, so handing work to the sidekick is the only path that exists. Skills are advisory in every harness (opencode loads them at the model's discretion), which is why nothing load-bearing lives in one. And you can verify instead of trusting: the `fusion-audit` plugin and opencode's session DB record what every agent actually did.
-
-</details>
-
-<details>
-<summary><b>How is this different from superpowers or other orchestration approaches?</b></summary>
-
-Different layer. Skill libraries like [superpowers](https://github.com/obra/superpowers) teach agents *how to work*: process knowledge (TDD, debugging, planning) delivered as skills and hooks. That guidance is valuable, but a hook injects text, and the model can still not comply. Fusion configures *what agents can do*: capabilities are removed at the permission layer, so the pattern holds even when the model has a bad day. The second difference is the point of the pattern: per-role model routing for cost (expensive judgment, cheap execution) with cross-vendor review as a side effect, which skill libraries do not do. Versus code-level frameworks like LangGraph or CrewAI: no framework and no code; this is configuration on a normal interactive session. The approaches compose: superpowers supports opencode, so its skills can run inside a Fusion setup.
-
-</details>
-
-## Troubleshooting
-
-<details>
-<summary>Common issues</summary>
-
-If you installed the optional command, run `/fusion-status` first; it checks the usual suspects in one shot: live enforcement in the running session, the config on disk, and the installed agent files.
-
-### `npx skills add ...` crashes with a `styleText` SyntaxError
-
-```
-SyntaxError: The requested module 'node:util' does not provide an export named 'styleText'
-```
-
-Your Node is too old for the installer. The install command runs Vercel's [`skills`](https://github.com/vercel-labs/skills) CLI, and since `skills@1.5.16` its bundle uses `util.styleText`, which only exists in **Node 20.12+**, even though the package still declares support for Node 18 ([vercel-labs/skills#1672](https://github.com/vercel-labs/skills/issues/1672)). Node 18 (Ubuntu's apt default, end-of-life since April 2025) crashes at startup with the error above. Any of these fixes work:
-
-- **Upgrade Node** (recommended; Node 18 is EOL anyway): install Node 22 via [nvm](https://github.com/nvm-sh/nvm) or [NodeSource](https://github.com/nodesource/distributions), then re-run the command.
-- **Pin the last compatible installer**: `npx skills@1.5.15 add mihneaptu/opencode-fusion --skill fusion-setup -g -a opencode -y`; 1.5.15 is the last release without the `styleText` import, and the skill it installs is identical.
-- **Skip npx entirely**: clone this repo and copy `.opencode/skills/fusion-setup/` into `~/.config/opencode/skills/`; the skill itself is plain markdown with no Node dependency.
-
-### The main agent edits files directly
-
-The config was not loaded. Fully quit and restart opencode; it loads config at startup, not mid-session. Then confirm `edit: deny` is set in the installed `~/.config/opencode/agent/build.md` frontmatter.
-
-### The sidekick is not being invoked
-
-Check the build agent's `permission.task` graph in `~/.config/opencode/agent/build.md`: it must deny broadly with `"*": deny` first, then allow `"sidekick": allow` (and the other named specialists). Do not use bare `task: allow`, which exposes every subagent, including the built-in `general`.
-
-### A model returns 404 or 400
-
-The model id may be wrong or changed. Confirm the exact `provider-id/model-id` against your provider, and that the provider block's `baseURL`/`apiKey` are correct. If the key uses `{env:VAR}` substitution, check the variable is actually set in the environment opencode launches from; an unset variable silently becomes an empty string. For progrok's Grok models, the composer coding models are callable but intentionally not listed in `/v1/models`, so a missing entry there does not mean the id is wrong.
-
-### A bash command gets blocked unexpectedly
-
-First check whether the block is actually expected: commands outside the allowlist (searches like `git ls-files`, file writes, `git checkout`) are *meant* to be denied, and the agent recovers by reading or delegating; see [Verify it works](#verify-it-works).
-
-If an *allowlisted* command gets blocked, the usual cause is chaining. Each command in the line is matched separately and the call is denied if any one of them fails, so one unlisted segment sinks the whole line - most often a pipe consumer like `head` or `grep`, or an `echo` wrapper. Run each allowed command as its own separate call, and the denial will name the command responsible.
-
-### A search reports "zero matches" for something that exists
-
-The search tools run ripgrep with standard ignore rules, so delegated searches silently skip anything matched by `.gitignore`. A gitignored path (local fixtures, generated code) produces a confident "no matches" even when the text is right there, and the main agent will relay that as fact. If agents need to search a gitignored directory, add a root `.ignore` file whitelisting it (for example `!fixtures/`): ripgrep reads `.ignore` with higher precedence than `.gitignore`, and git pays no attention to it. Note that `git diff` has the same blind spot: changes to gitignored files never appear in it, so the main agent reviews those by reading the file directly.
-
-</details>
-
-## Slash commands and optional plugins
-
-<details>
-<summary>Four optional pieces</summary>
-
-Four optional pieces ship with the skill:
-
-- **`/fusion-setup` command** (`commands/fusion-setup.md`): a discoverable slash command that launches the setup flow. Run `/fusion-setup` for the full interview, or pass an argument like `/fusion-setup reconfigure sidekick` to jump straight to a targeted change. Install it to `~/.config/opencode/commands/`.
-- **`/fusion-status` command** (`commands/fusion-status.md`): a health check that verifies the setup is installed, loaded, and enforcing: the live tool schema (denied tools actually absent from the running agent), the config on disk, the installed agent files, and the optional Claude bridge. It only reports; it changes nothing. Install it to `~/.config/opencode/commands/`.
-- **`fusion-audit` plugin** (`plugins/fusion-audit.js`): logs the delegation tree (subagent spawns and edit/write/apply_patch/task tool calls) and aggregates per-agent token usage per session through opencode's logger, so you can audit that the main agent delegated instead of editing and see where each session's tokens went: the raw numbers behind "did Fusion actually save money?". It is observational only: opencode's tool hooks do not expose the calling agent, so enforcement stays with the permission layer; the plugin just makes the delegation visible. Install it to `~/.config/opencode/plugins/`.
-- **`fusion-claude` plugin** (`plugins/fusion-claude.js`): optional Claude Code Pro/Max plan reviewer. It exposes a sanitized status check and a stateless review tool, invokes only the official `claude` CLI, and leaves the OAuth credential inside Claude Code. Install it with the `claude` extra rather than copying it alone, because the installer also adds the global permission deny. Re-running the installer without the `claude` extra leaves an already-installed bridge in place; remove it with `install.js undo`.
-
-</details>
+`test/integration` needs a real opencode 1.18.x binary on `PATH`. See [docs/testing.md](docs/testing.md) for details.
 
 ## Files
 
-<details>
-<summary>All files</summary>
+- `src/` - the plugin: config hook, injected agents, tools, audit hook, Claude bridge
+- `site/` - the marketing site and docs (GitHub Pages)
+- `scripts/` - changelog renderer, integration runner, profile checker
+- `test/` - unit and consistency suites plus the live integration harness
+- `docs/` - releasing and testing guides
+- `flow-diagram.png` - architecture diagram (Main Agent vs Sidekick swimlane)
 
-Everything Fusion installs lives in one place, the skill bundle at `.opencode/skills/fusion-setup/`:
+## Built with opencode-conductor
 
-| File (inside the skill bundle) | Purpose |
-|------|---------|
-| `SKILL.md` | The conversational setup flow the skill runs |
-| `agent/build.md` | Main agent: edit denied, search denied, bash allowlisted, task allowed, exploration + parallelization rules |
-| `agent/plan.md` | Plan-mode agent: read-only inspection plus delegation, cannot execute or commit |
-| `agent/sidekick.md` | Sidekick prompt (model set in `opencode.json`) |
-| `agent/research.md` | Optional research specialist: read-only, web + docs |
-| `agent/design.md` | Optional design specialist: frontend/UI, loads design skills |
-| `agent/reviewer.md` | Optional reviewer specialist: critiques plans and audits diffs, read-only plus lint/test |
-| `agent/vision.md` | Optional vision specialist: transcribes images when the main model has no image input |
-| `profiles/` | Bundled subscription profiles: named per-role model presets applied via `install.js apply --profile <name>` |
-| `commands/` | Optional `/fusion-setup` (launches setup) and `/fusion-status` (health check) slash commands |
-| `plugins/fusion-audit.js` | Optional read-only plugin that logs the delegation tree and per-agent token usage per session for auditing |
-| `plugins/fusion-claude.js` | Optional Claude Code Pro/Max bridge for stateless, read-only plan reviews |
-| `scripts/install.js` | Deterministic installer the skill drives: backup, merge, atomic write, manifest, undo |
-
-The rest of the repo supports it:
-
-| File | Purpose |
-|------|---------|
-| `scripts/check-profiles.js` | Live check that profile model ids still exist on models.dev (`npm run check-profiles`) |
-| `test/integration/` | Live enforcement tests: real opencode binary against a fake provider (`npm run test:integration`) |
-| `opencode.json` | Local reference config (gitignored); model choices vary by developer |
-| `flow-diagram.png` | Architecture diagram (Main Agent vs Sidekick swimlane) |
-| `LICENSE` | MIT license |
-
-</details>
-
-## Built with opencode-fusion
-
-This repo was configured using the Fusion pattern itself. The main agent planned the structure, reviewed every change, and verified against real command output. The sidekick wrote the files and ran the commands. Every change went through the flow above.
+This repo was configured using the pattern itself. The main agent planned the structure, reviewed every change, and verified against real command output. The sidekick wrote the files and ran the commands. Every change went through the flow above.
 
 ## Disclaimer
 
-This project is not affiliated with, endorsed by, or built by the opencode team. [opencode](https://opencode.ai) is a separate project by [Anomaly](https://anoma.ly). This repo provides configuration that works with opencode but is not part of it.
+This project is not affiliated with, endorsed by, or built by the opencode team. [opencode](https://opencode.ai) is a separate project by [Anomaly](https://anoma.ly). This repo provides a plugin that works with opencode but is not part of it.
 
 ## Credit
 
-Inspired by [Devin Fusion](https://cognition.com/blog/devin-fusion) by [Cognition](https://cognition.com): the "sidekick" framing, the principle that "the main agent should take minimal actions", and the benchmark numbers quoted in this README are theirs, from the launch post and the July 2026 follow-up, ["Making Fable Cheaper Than Opus"](https://cognition.com/blog/making-fable-cheaper-than-opus). The underlying split has older roots. [Aider's architect/editor mode](https://aider.chat/2024/09/26/architect.html) separated code reasoning from code editing back in 2024: one model describes the solution, a second turns it into clean edits. The permission-layer enforcement, the cross-vendor review setup, and the specialist team are this repo's own.
+Forked from [opencode-fusion](https://github.com/mihneaptu/opencode-fusion) by [mihneaptu](https://github.com/mihneaptu) (archived August 24, 2026; final release v1.2.0). The "Devin Fusion" sidekick pattern - the framing, the principle that "the main agent should take minimal actions", and the benchmark numbers quoted in this README - is from [Cognition](https://cognition.com), via the [launch post](https://cognition.com/blog/devin-fusion) and the July 2026 follow-up, ["Making Fable Cheaper Than Opus"](https://cognition.com/blog/making-fable-cheaper-than-opus). The underlying split has older roots. [Aider's architect/editor mode](https://aider.chat/2024/09/26/architect.html) separated code reasoning from code editing back in 2024: one model describes the solution, a second turns it into clean edits. The permission-layer enforcement, the cross-vendor review setup, and the specialist team are this repo's own.
+
+## License
+
+[MIT](LICENSE), dual copyright: the original fork's author and Joshua Kimsey (modifications).
