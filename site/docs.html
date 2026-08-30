@@ -266,14 +266,29 @@
 
         <section id="install-opencode" class="docs-section">
           <h2>Install OpenCode</h2>
-          <p>Add one line to the <code>plugin</code> array of your opencode config — the global <code>~/.config/opencode/opencode.json</code> or a project-level <code>opencode.json</code>. No clone, no build step, no skill.</p>
+          <p>Install the plugin with the opencode CLI (recommended), or add it to the <code>plugin</code> array of your opencode config by hand - the global <code>~/.config/opencode/opencode.json</code> or a project-level <code>opencode.json</code>. No clone, no build step, no skill.</p>
 
           <h3>Install</h3>
           <ol class="docs-steps">
-            <li>Add the plugin line to your <code>opencode.json</code> (pick a <a href="#profiles">profile</a>, or omit options to start bare).</li>
-            <li>Fully quit and restart OpenCode — opencode auto-installs npm plugins via Bun at startup.</li>
+            <li>Run the CLI install command below (or add the plugin line to your <code>opencode.json</code> by hand - pick a <a href="#profiles">profile</a>, or omit options to start bare).</li>
+            <li>Fully quit and restart OpenCode - opencode auto-installs npm plugins via Bun at startup.</li>
             <li>Verify with the <a href="#verify">lint smoke test</a>.</li>
           </ol>
+
+          <div class="command">
+            <div class="command-bar">
+              <span class="command-label">Terminal</span>
+              <button class="copy-btn" type="button" data-copy-target="docs-cmd-cli" aria-label="Copy CLI install command">
+                <svg class="copy-btn-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></svg>
+                <span class="copy-btn-text">Copy</span>
+              </button>
+            </div>
+            <pre class="command-pre"><code id="docs-cmd-cli">opencode plugin github:JoshuaKimsey/opencode-fusion-conductor -g</code></pre>
+          </div>
+
+          <p>The CLI command writes the plugin entry into your config itself and fails with a real error if the install fails. <code>-g</code> targets the global config; drop it for a project-local <code>.opencode/opencode.json</code>. To pin a specific revision, append a commit SHA to the spec (<code>github:JoshuaKimsey/opencode-fusion-conductor#&lt;commit-sha&gt;</code>) - do not pin by this repo's <code>v1.x</code> tags, which are inherited from upstream opencode-fusion and point at old releases.</p>
+
+          <p>Or edit the config by hand:</p>
 
           <div class="command">
             <div class="command-bar">
@@ -394,6 +409,10 @@
             <div class="docs-faq-item">
               <dt>The plugin did not load / the agents are not injected</dt>
               <dd>The config was not loaded. Fully quit and restart OpenCode — plugins auto-install and the agent registry materializes at startup, not mid-session. Confirm the plugin entry is in the <code>plugin</code> array of the right <code>opencode.json</code> and that the version is pinned correctly.</dd>
+            </div>
+            <div class="docs-faq-item">
+              <dt>The plugin loads but nothing changes / no conductor command</dt>
+              <dd>On opencode 1.18.x, when a plugin's git or npm install fails at startup, opencode exits normally and logs nothing (even with <code>--log-level DEBUG --print-logs</code>) - it runs with the stock agents, which looks exactly like "the plugin did nothing". Fingerprint: an empty <code>~/.cache/opencode/packages/&lt;spec&gt;/</code> directory with no <code>node_modules</code> inside. Check that <code>git</code> is on PATH and github.com is reachable, delete the empty directory, and retry the install. The <code>opencode plugin ...</code> CLI command does not swallow this error, so reinstalling via the CLI surfaces it directly.</dd>
             </div>
             <div class="docs-faq-item">
               <dt>Leftover fusion files override the injected agents</dt>

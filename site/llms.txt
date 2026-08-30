@@ -21,7 +21,9 @@ Fusion Conductor is an *opencode plugin* (not an app). Install it by adding one 
 
 ## Quick install
 
-Add one line to your opencode config (`~/.config/opencode/opencode.json`, or a project-level `opencode.json`):
+Recommended: `opencode plugin github:JoshuaKimsey/opencode-fusion-conductor -g` (drop `-g` for a project-local `.opencode/opencode.json`). It writes the config entry itself and fails with a real error if the install fails.
+
+Manual alternative: add one line to your opencode config (`~/.config/opencode/opencode.json`, or a project-level `opencode.json`):
 
 ```json
 {
@@ -30,6 +32,8 @@ Add one line to your opencode config (`~/.config/opencode/opencode.json`, or a p
 ```
 
 Then fully quit and restart opencode. opencode auto-installs npm plugins via Bun at startup, so there is no skill, no installer, and no interview. The plugin injects the agent team and the `/conductor` command on the next launch. Uninstall by removing the line and restarting.
+
+Silent-failure note: on opencode 1.18.x, a plugin install that fails at startup exits normally and logs nothing (even with `--log-level DEBUG --print-logs`) - opencode just runs with stock agents. Fingerprint: an empty `~/.cache/opencode/packages/<spec>/` (no `node_modules`). Ensure git is on PATH and github.com is reachable, delete the empty dir, retry; the `opencode plugin ...` CLI does not swallow this error.
 
 Coming from opencode-fusion? Say `undo fusion` with the old fusion-setup skill first to remove the file-based install, then add the plugin line. `/conductor` warns if leftover fusion files are detected.
 

@@ -23,8 +23,24 @@ This is a **rewrite of [opencode-fusion](https://github.com/mihneaptu/opencode-f
 
 ## Quick start
 
-Add one line to your opencode config (`~/.config/opencode/opencode.json`, or a
-project-level `opencode.json`):
+Install with the opencode plugin CLI (recommended):
+
+```bash
+opencode plugin github:JoshuaKimsey/opencode-fusion-conductor -g
+```
+
+The CLI command writes the plugin entry into your opencode config itself and
+fails with a real error if the install fails. `-g` targets the global config
+(`~/.config/opencode/opencode.json`); drop it to install into a project-local
+`.opencode/opencode.json`.
+
+To pin a specific revision, append a commit SHA to the spec:
+`github:JoshuaKimsey/opencode-fusion-conductor#<commit-sha>`. Do not pin by
+this repo's `v1.x` tags - they are inherited from upstream opencode-fusion and
+point at old releases.
+
+Manual alternative: add one line to your opencode config yourself
+(`~/.config/opencode/opencode.json`, or a project-level `opencode.json`):
 
 ```json
 {
@@ -32,11 +48,24 @@ project-level `opencode.json`):
 }
 ```
 
+The `@1.0.0` npm spec form is for after npm publish; the `github:` spec form
+above works before publish.
+
 Then fully quit and restart opencode. opencode auto-installs npm plugins via
 Bun at startup, so there is no skill, no installer, and no interview. The
 plugin injects the agent team and the `/conductor` command on the next launch.
 
 That is the whole install. **Uninstall** by removing the line and restarting.
+
+> [!IMPORTANT]
+> **If the plugin seems to do nothing:** on opencode 1.18.x, when a plugin's
+> git or npm install fails at startup, opencode exits normally, logs nothing
+> (even with `--log-level DEBUG --print-logs`), and runs with the stock agents
+> - it looks exactly like "the plugin did nothing". The fingerprint is an
+> empty `~/.cache/opencode/packages/<spec>/` directory with no `node_modules`
+> inside. Fix: make sure `git` is on PATH and github.com is reachable, delete
+> the empty directory, and retry. The `opencode plugin ...` CLI command does
+> not swallow this error.
 
 To verify it is working, open a project with some lint errors and ask:
 
