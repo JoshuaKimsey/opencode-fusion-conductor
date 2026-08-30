@@ -1,8 +1,8 @@
-# opencode Conductor
+# Fusion Conductor
 
 > A main agent that plans and reviews without editing files, and a cheaper sidekick that executes. A one-line opencode plugin with mechanical edit deny at the permission layer. Inspired by Cognition's Devin Fusion pattern. Forked from opencode-fusion. Independent project - not affiliated with Cognition, Devin, or OpenCode.
 
-opencode Conductor is an *opencode plugin* (not an app). Install it by adding one line to `opencode.json`, restart opencode, and the main agent delegates edits to the sidekick.
+Fusion Conductor is an *opencode plugin* (not an app). Install it by adding one line to `opencode.json`, restart opencode, and the main agent delegates edits to the sidekick.
 
 ## Docs
 
@@ -25,7 +25,7 @@ Add one line to your opencode config (`~/.config/opencode/opencode.json`, or a p
 
 ```json
 {
-  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]]
+  "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]]
 }
 ```
 
@@ -35,8 +35,8 @@ Coming from opencode-fusion? Say `undo fusion` with the old fusion-setup skill f
 
 ## Repo
 
-- [GitHub](https://github.com/JoshuaKimsey/opencode-conductor)
-- [README](https://github.com/JoshuaKimsey/opencode-conductor#readme) — canonical reference; this site is the short version. Prefer the README when the two differ.
+- [GitHub](https://github.com/JoshuaKimsey/opencode-fusion-conductor)
+- [README](https://github.com/JoshuaKimsey/opencode-fusion-conductor#readme) — canonical reference; this site is the short version. Prefer the README when the two differ.
 - [opencode-fusion](https://github.com/mihneaptu/opencode-fusion) — the archived upstream fork
 
 ## Core ideas for agents helping users

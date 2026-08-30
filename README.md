@@ -1,7 +1,7 @@
-# opencode-conductor
+# Fusion Conductor
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub](https://img.shields.io/badge/GitHub-JoshuaKimsey/opencode--conductor-181717?logo=github)](https://github.com/JoshuaKimsey/opencode-conductor)
+[![GitHub](https://img.shields.io/badge/GitHub-JoshuaKimsey/opencode--fusion--conductor-181717?logo=github)](https://github.com/JoshuaKimsey/opencode-fusion-conductor)
 
 A minimal, working multi-model team for [opencode](https://opencode.ai): a **main agent** that plans and reviews but **cannot edit files**, delegating every change to a cheaper, faster **sidekick**. Inspired by the [Devin Fusion "sidekick" pattern](https://cognition.com/blog/devin-fusion) from Cognition.
 
@@ -14,8 +14,10 @@ This is a **rewrite of [opencode-fusion](https://github.com/mihneaptu/opencode-f
 > [!NOTE]
 > **Fork and attribution.** This project is forked from
 > [mihneaptu/opencode-fusion](https://github.com/mihneaptu/opencode-fusion)
-> (archived August 24, 2026; final release v1.2.0) and rebranded to a scoped
-> npm plugin named `@joshuakimsey/opencode-conductor`. The "Devin Fusion
+> (archived August 24, 2026; final release v1.2.0) and rebranded to the npm
+> plugin named `opencode-fusion-conductor`. The unscoped `opencode-conductor`
+> name is taken by NocturnLabs's unrelated conductor plugin, so we chose the
+> fuller spelling, honoring the opencode-fusion lineage. The "Devin Fusion
 > pattern" framing and its permission-layer enforcement come from Cognition.
 > All three are credited below.
 
@@ -26,7 +28,7 @@ project-level `opencode.json`):
 
 ```json
 {
-  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]]
+  "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]]
 }
 ```
 
@@ -98,7 +100,7 @@ All plugin options live in the plugin entry of your `opencode.json`:
 
 ```json
 {
-  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]]
+  "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]]
 }
 ```
 
@@ -114,7 +116,7 @@ Examples:
 ```jsonc
 // Use a subscription profile, then override one role.
 {
-  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", {
+  "plugin": [["opencode-fusion-conductor@1.0.0", {
     "profile": "opencode-go",
     "models": { "sidekick": "opencode-go/deepseek-v4-flash" },
     "audit": true
@@ -125,7 +127,7 @@ Examples:
 ```jsonc
 // Add the Claude Code plan-review bridge.
 {
-  "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", {
+  "plugin": [["opencode-fusion-conductor@1.0.0", {
     "claude": true
   }]]
 }
@@ -231,7 +233,7 @@ npm run build:changelog  # regenerate site/changelog.html from CHANGELOG.md
 - `docs/` - releasing and testing guides
 - `flow-diagram.png` - architecture diagram (Main Agent vs Sidekick swimlane)
 
-## Built with opencode-conductor
+## Built with Fusion Conductor
 
 This repo was configured using the pattern itself. The main agent planned the structure, reviewed every change, and verified against real command output. The sidekick wrote the files and ran the commands. Every change went through the flow above.
 

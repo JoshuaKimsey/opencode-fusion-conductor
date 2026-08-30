@@ -1,7 +1,7 @@
 # Changelog
 
 Notable changes to this project. This is the changelog for
-`@joshuakimsey/opencode-conductor`, the opencode plugin; the release history of
+`opencode-fusion-conductor`, the opencode plugin; the release history of
 the forked `opencode-fusion` project that preceded it is preserved below with
 its release headings prefixed `fusion-` (the plugin's own releases use plain
 versions).
@@ -13,9 +13,11 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - Forked and rebranded from opencode-fusion v1.2.0 into a real opencode npm
-  plugin distributed as `@joshuakimsey/opencode-conductor` (scoped; the
-  unscoped name is taken). The skill, installer, and manifest machinery are
-  deleted; the plugin is installed by adding one line to the `plugin` array of
+  plugin distributed as `opencode-fusion-conductor` (the unscoped
+  `opencode-conductor` name is taken by NocturnLabs's unrelated conductor
+  plugin, so we chose the fuller spelling, honoring the opencode-fusion
+  lineage). The skill, installer, and manifest machinery are deleted; the
+  plugin is installed by adding one line to the `plugin` array of
   `opencode.json`, and opencode auto-installs it via Bun at startup. Uninstall
   is removing that line.
 - The `fusion-setup` / `fusion-status` commands and the reconfigure interview

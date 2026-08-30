@@ -29,10 +29,10 @@ const CONSTANTS_MODULE = pathToFileURL(path.join(root, 'src', 'constants.js')).h
 describe('docs consistency', () => {
   test('README names the exact package/version that package.json ships', () => {
     const { name, version } = require(path.join(root, 'package.json'));
-    assert.equal(name, '@joshuakimsey/opencode-conductor');
+    assert.equal(name, 'opencode-fusion-conductor');
     assert.ok(
-      readme.includes(`@joshuakimsey/opencode-conductor@${version}`),
-      `README must carry the install snippet "@joshuakimsey/opencode-conductor@${version}"`
+      readme.includes(`opencode-fusion-conductor@${version}`),
+      `README must carry the install snippet "opencode-fusion-conductor@${version}"`
     );
   });
 
@@ -92,8 +92,8 @@ describe('docs consistency', () => {
     describe(`site/${name}`, () => {
       test('is rebranded: carries the new repo/pages identity', () => {
         assert.ok(
-          text.includes('joshuakimsey.github.io/opencode-conductor') ||
-          text.includes('github.com/JoshuaKimsey/opencode-conductor'),
+          text.includes('joshuakimsey.github.io/opencode-fusion-conductor') ||
+          text.includes('github.com/JoshuaKimsey/opencode-fusion-conductor'),
           `site/${name} must reference the Conductor pages or repo URL`
         );
       });
@@ -114,8 +114,8 @@ describe('docs consistency', () => {
   test('site/script.js reads star counts from the Conductor repo', () => {
     const script = read(path.join('site', 'script.js'));
     assert.ok(
-      script.includes('https://api.github.com/repos/JoshuaKimsey/opencode-conductor'),
-      'site/script.js must fetch star counts from the JoshuaKimsey/opencode-conductor repo'
+      script.includes('https://api.github.com/repos/JoshuaKimsey/opencode-fusion-conductor'),
+      'site/script.js must fetch star counts from the JoshuaKimsey/opencode-fusion-conductor repo'
     );
   });
 
@@ -124,8 +124,8 @@ describe('docs consistency', () => {
     for (const name of ['index.html', 'docs.html']) {
       const text = read(path.join('site', name));
       assert.ok(
-        text.includes(`@joshuakimsey/opencode-conductor@${version}`),
-        `site/${name} must carry the install snippet "@joshuakimsey/opencode-conductor@${version}"`
+        text.includes(`opencode-fusion-conductor@${version}`),
+        `site/${name} must carry the install snippet "opencode-fusion-conductor@${version}"`
       );
     }
   });

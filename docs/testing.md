@@ -1,4 +1,4 @@
-# Testing opencode-conductor
+# Testing Fusion Conductor
 
 ## Automated checks
 

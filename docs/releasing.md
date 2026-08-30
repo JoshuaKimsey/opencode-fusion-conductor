@@ -1,23 +1,22 @@
 # Releasing
 
 How a change gets from a pull request to a published release of
-`@joshuakimsey/opencode-conductor`.
+`opencode-fusion-conductor`.
 
 ## What users actually install
 
 Users install the published npm package:
 
 ```
-{ "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]] }
+{ "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]] }
 ```
 
 opencode auto-installs npm plugins via Bun at startup, so the package on the
 npm registry **is** the release channel. A git tag records what shipped; it
 does not gate distribution.
 
-The package is scoped and currently unpublished, so the first release publishes
-it. Scoped packages publish to the public registry only with an explicit access
-flag (see below).
+The package is currently unpublished, so the first release publishes it.
+Unscoped packages are public by default, so no access flag is needed.
 
 ## Per-pull-request duty
 
@@ -60,13 +59,10 @@ copy.
    ```
 
 4. Publish to npm. `package.json` currently carries `"private": true`, which
-   blocks `npm publish`; flip it to `false` (or override with
-   `npm publish --access public`, which publishes scoped packages to the public
-   registry regardless). One of the two is required - a scoped package is
-   private by default and npm refuses to publish it publicly otherwise.
+   blocks `npm publish`; flip it to `false`.
 
    ```
-   npm publish --access public
+   npm publish
    ```
 
    The `files` array ships `src/` only; the site, tests, and scripts are not
@@ -76,7 +72,7 @@ copy.
 
    ```
    git switch main && git pull --ff-only
-   git tag -a vX.Y.Z -m "opencode-conductor X.Y.Z"
+   git tag -a vX.Y.Z -m "opencode-fusion-conductor X.Y.Z"
    git push origin vX.Y.Z
    gh release create vX.Y.Z --title "vX.Y.Z" --latest --notes-file <file>
    ```
@@ -85,7 +81,7 @@ copy.
    entry that describes it.
 
 Because the release also touches `site/`, merging triggers a Pages deploy at
-https://joshuakimsey.github.io/opencode-conductor/. Check the published
+https://joshuakimsey.github.io/opencode-fusion-conductor/. Check the published
 changelog page afterwards.
 
 ## Known rough edge

@@ -6,16 +6,16 @@
   <meta name="color-scheme" content="light dark">
   <meta name="theme-color" content="#fbfbfd" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
-  <meta name="description" content="opencode Conductor docs: install the one-line plugin for OpenCode, verify the flow, customize models, and troubleshoot.">
-  <title>Docs — opencode Conductor</title>
+  <meta name="description" content="Fusion Conductor docs: install the one-line plugin for OpenCode, verify the flow, customize models, and troubleshoot.">
+  <title>Docs — Fusion Conductor</title>
   <link rel="alternate" type="text/markdown" title="LLM-friendly docs" href="llms.txt">
-  <link rel="canonical" href="https://joshuakimsey.github.io/opencode-conductor/docs.html">
+  <link rel="canonical" href="https://joshuakimsey.github.io/opencode-fusion-conductor/docs.html">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="opencode Conductor">
-  <meta property="og:url" content="https://joshuakimsey.github.io/opencode-conductor/docs.html">
-  <meta property="og:title" content="Docs — opencode Conductor">
-  <meta property="og:description" content="opencode Conductor docs: install the one-line plugin for OpenCode, verify the flow, customize models, and troubleshoot.">
-  <meta property="og:image" content="https://joshuakimsey.github.io/opencode-conductor/assets/hero-poster.jpg">
+  <meta property="og:site_name" content="Fusion Conductor">
+  <meta property="og:url" content="https://joshuakimsey.github.io/opencode-fusion-conductor/docs.html">
+  <meta property="og:title" content="Docs — Fusion Conductor">
+  <meta property="og:description" content="Fusion Conductor docs: install the one-line plugin for OpenCode, verify the flow, customize models, and troubleshoot.">
+  <meta property="og:image" content="https://joshuakimsey.github.io/opencode-fusion-conductor/assets/hero-poster.jpg">
   <meta property="og:image:width" content="1280">
   <meta property="og:image:height" content="720">
   <meta property="og:image:alt" content="Abstract hero art: a blue and an amber gradient glow on a light background">
@@ -77,7 +77,7 @@
 
   <header class="site-header" id="top">
     <div class="container header-inner">
-      <a class="wordmark header-pill" href="index.html" aria-label="opencode Conductor home">
+      <a class="wordmark header-pill" href="index.html" aria-label="Fusion Conductor home">
         <span class="wordmark-mark" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <defs>
@@ -94,7 +94,7 @@
             </g>
           </svg>
         </span>
-        <span class="wordmark-text">opencode<span class="wordmark-accent">Conductor</span></span>
+        <span class="wordmark-text">Fusion<span class="wordmark-accent">Conductor</span></span>
       </a>
 
       <div class="header-cluster header-pill">
@@ -106,7 +106,7 @@
             <li><a href="changelog.html">Changelog</a></li>
           </ul>
           <a class="btn btn-primary btn-sm" href="index.html#get-started">Get started</a>
-          <a class="gh-btn" href="https://github.com/JoshuaKimsey/opencode-conductor" target="_blank" rel="noopener noreferrer" aria-label="Star opencode-conductor on GitHub">
+          <a class="gh-btn" href="https://github.com/JoshuaKimsey/opencode-fusion-conductor" target="_blank" rel="noopener noreferrer" aria-label="Star opencode-fusion-conductor on GitHub">
             <svg class="gh-btn-mark" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
             <span class="gh-btn-count" data-gh-stars>GitHub</span>
             <svg class="gh-btn-star" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1.1l2.05 4.15 4.58.67-3.31 3.23.78 4.56L8 11.56l-4.1 2.15.78-4.56-3.31-3.23 4.58-.67L8 1.1Z"/></svg>
@@ -164,20 +164,20 @@
       <article class="docs-article">
         <header class="docs-hero">
           <p class="docs-kicker">Documentation</p>
-          <h1 class="docs-title">opencode Conductor</h1>
+          <h1 class="docs-title">Fusion Conductor</h1>
           <p class="docs-lead">Main agent plans and reviews. Sidekick edits. Install, verify, and customize the pattern on OpenCode.</p>
         </header>
 
         <section id="overview" class="docs-section">
           <h2>Overview</h2>
-          <p>opencode Conductor is an <a href="https://opencode.ai/docs/plugins/" target="_blank" rel="noopener noreferrer">opencode plugin</a>, not an app. It implements the <a href="https://cognition.com/blog/devin-fusion" target="_blank" rel="noopener noreferrer">Devin Fusion sidekick pattern</a>: a main agent that plans and reviews but cannot edit files, and a cheaper sidekick that executes every change.</p>
+          <p>Fusion Conductor is an <a href="https://opencode.ai/docs/plugins/" target="_blank" rel="noopener noreferrer">opencode plugin</a>, not an app. It implements the <a href="https://cognition.com/blog/devin-fusion" target="_blank" rel="noopener noreferrer">Devin Fusion sidekick pattern</a>: a main agent that plans and reviews but cannot edit files, and a cheaper sidekick that executes every change.</p>
           <p>The main agent’s file editing is denied at the permission layer. Its only way to change a file is to hand a spec to the sidekick. Frontier intelligence stays on the plan and the review; mechanical work stays cheap.</p>
 
           <div class="docs-callout">
             <p><strong>Built for OpenCode.</strong> A one-line npm plugin install with mechanical edit deny, multi-provider models, and the <code>/conductor</code> command. Forked from <a href="https://github.com/mihneaptu/opencode-fusion" target="_blank" rel="noopener noreferrer">opencode-fusion</a>.</p>
           </div>
 
-          <p class="docs-note">This page is the short version. The <a href="https://github.com/JoshuaKimsey/opencode-conductor#readme" target="_blank" rel="noopener noreferrer">README</a> is the canonical reference — full setup, provider examples, FAQ, and the complete troubleshooting list live there.</p>
+          <p class="docs-note">This page is the short version. The <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor#readme" target="_blank" rel="noopener noreferrer">README</a> is the canonical reference — full setup, provider examples, FAQ, and the complete troubleshooting list live there.</p>
         </section>
 
         <section id="how-it-works" class="docs-section">
@@ -283,7 +283,7 @@
                 <span class="copy-btn-text">Copy</span>
               </button>
             </div>
-            <pre class="command-pre"><code id="docs-cmd-opencode">{ "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { "profile": "opencode-go" }]] }</code></pre>
+            <pre class="command-pre"><code id="docs-cmd-opencode">{ "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]] }</code></pre>
           </div>
 
           <p class="docs-note">Works on Windows, macOS, and Linux. No skill, no installer, no interview. Uninstall by removing the line and restarting.</p>
@@ -342,7 +342,7 @@
             </table>
           </div>
 
-          <p class="docs-note">Every pick stays overridable per role via the <code>models</code> option, and model lineups rotate — the <a href="https://github.com/JoshuaKimsey/opencode-conductor#profiles" target="_blank" rel="noopener noreferrer">README’s profiles section</a> is canonical for the full role tables and caveats.</p>
+          <p class="docs-note">Every pick stays overridable per role via the <code>models</code> option, and model lineups rotate — the <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor#profiles" target="_blank" rel="noopener noreferrer">README’s profiles section</a> is canonical for the full role tables and caveats.</p>
         </section>
 
         <section id="verify" class="docs-section">
@@ -371,7 +371,7 @@
           <h2>Customize</h2>
           <p>All plugin options live in the plugin entry of <code>~/.config/opencode/opencode.json</code>: <code>profile</code> (the subscription profile), <code>models</code> (per-role overrides as <code>role -> "provider/model-id"</code> for <code>build</code>, <code>plan</code>, <code>sidekick</code>, <code>explore</code>, <code>research</code>, <code>design</code>, <code>reviewer</code>, <code>vision</code>), <code>audit</code> (boolean, off by default), and <code>claude</code> (boolean, off by default — enables the Claude Code bridge tools <code>conductor_claude_status</code>/<code>conductor_claude_review</code>, which require the Claude Pro/Max CLI installed and authenticated).</p>
           <p>Edit the entry, then restart OpenCode — the agent registry is materialized at startup, so model changes need a full restart. Or run <code>/conductor</code> with arguments to have <code>conductor_configure</code> edit the options for you atomically, and restart when it tells you to. Keep the sidekick cheaper and faster than main when you can.</p>
-          <p>The README covers the rest: <a href="https://github.com/JoshuaKimsey/opencode-conductor#configuration" target="_blank" rel="noopener noreferrer">configuration options and examples</a>, <a href="https://github.com/JoshuaKimsey/opencode-conductor#enforced-vs-advised" target="_blank" rel="noopener noreferrer">adjusting the main agent’s bash allowlist</a> (keep <code>"*": "deny"</code> first; run one command per call — a chained line is matched segment by segment and one denied segment denies the whole call), and <a href="#migration">migrating from opencode-fusion</a> (run the old <code>undo fusion</code> to remove the file-based install first).</p>
+          <p>The README covers the rest: <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor#configuration" target="_blank" rel="noopener noreferrer">configuration options and examples</a>, <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor#enforced-vs-advised" target="_blank" rel="noopener noreferrer">adjusting the main agent’s bash allowlist</a> (keep <code>"*": "deny"</code> first; run one command per call — a chained line is matched segment by segment and one denied segment denies the whole call), and <a href="#migration">migrating from opencode-fusion</a> (run the old <code>undo fusion</code> to remove the file-based install first).</p>
         </section>
 
         <section id="migration" class="docs-section">
@@ -405,7 +405,7 @@
             </div>
           </dl>
 
-          <p>More cases — sidekick never invoked, model 404/400, a blocked bash command, searches missing gitignored files — are covered in the <a href="https://github.com/JoshuaKimsey/opencode-conductor#readme" target="_blank" rel="noopener noreferrer">README</a>, which is the canonical reference.</p>
+          <p>More cases — sidekick never invoked, model 404/400, a blocked bash command, searches missing gitignored files — are covered in the <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor#readme" target="_blank" rel="noopener noreferrer">README</a>, which is the canonical reference.</p>
         </section>
 
         <section id="limitations" class="docs-section">
@@ -439,7 +439,7 @@
         <footer class="docs-end">
           <p>Forked from opencode-fusion. Independent project inspired by Cognition’s Devin Fusion. Not affiliated with or endorsed by Cognition, Devin, or OpenCode.</p>
           <p>
-            <a href="https://github.com/JoshuaKimsey/opencode-conductor" target="_blank" rel="noopener noreferrer">GitHub repository</a>
+            <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor" target="_blank" rel="noopener noreferrer">GitHub repository</a>
             ·
             <a href="changelog.html">Changelog</a>
             ·
@@ -458,7 +458,7 @@
     <div class="container footer-shell">
       <div class="footer-main">
         <div class="footer-brand">
-          <a class="wordmark" href="index.html" aria-label="opencode Conductor home">
+          <a class="wordmark" href="index.html" aria-label="Fusion Conductor home">
             <span class="wordmark-mark" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                 <defs>
@@ -474,7 +474,7 @@
                 </g>
               </svg>
             </span>
-            <span class="wordmark-text">opencode<span class="wordmark-accent">Conductor</span></span>
+            <span class="wordmark-text">Fusion<span class="wordmark-accent">Conductor</span></span>
           </a>
           <p class="footer-desc">Main agent plans and reviews. Sidekick edits. Built for OpenCode.</p>
         </div>
@@ -484,7 +484,7 @@
           <a href="docs.html">Docs</a>
           <a href="changelog.html">Changelog</a>
           <a href="index.html#get-started">Get started</a>
-          <a class="footer-nav-ext" href="https://github.com/JoshuaKimsey/opencode-conductor" target="_blank" rel="noopener noreferrer">
+          <a class="footer-nav-ext" href="https://github.com/JoshuaKimsey/opencode-fusion-conductor" target="_blank" rel="noopener noreferrer">
             GitHub
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h7v7M13 3 3 13"/></svg>
           </a>
@@ -492,7 +492,7 @@
       </div>
 
       <div class="footer-meta">
-        <p class="footer-copyright">&copy; 2026 opencode Conductor &middot; Open source</p>
+        <p class="footer-copyright">&copy; 2026 Fusion Conductor &middot; Open source</p>
         <p class="footer-disclaimer">Forked from opencode-fusion. Independent project inspired by Cognition&rsquo;s Devin Fusion. Not affiliated with or endorsed by Cognition, Devin, or OpenCode.</p>
       </div>
     </div>

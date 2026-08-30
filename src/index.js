@@ -1,7 +1,7 @@
 // Plugin entry point. opencode treats EVERY export of this module as a plugin,
 // so Conductor must be the only export. The loader calls it as
 // Conductor(input, options) where options is the tuple options from
-// config "plugin": [["@joshuakimsey/opencode-conductor@1.0.0", { ...options }]].
+// config "plugin": [["opencode-fusion-conductor@1.0.0", { ...options }]].
 
 import { applyConductor } from "./config.js";
 import { conductorTools } from "./tools/index.js";

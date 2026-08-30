@@ -9,7 +9,7 @@ const { pathToFileURL } = require('node:url');
 
 const root = path.join(__dirname, '..');
 
-const ENTRY = '@joshuakimsey/opencode-conductor';
+let ENTRY;
 
 let conductorTools;
 let configureTool;
@@ -18,16 +18,18 @@ let PROFILES;
 
 before(async () => {
   const load = (name) => import(pathToFileURL(path.join(root, 'src', name)).href);
-  const [toolsIndex, configure, status, profiles] = await Promise.all([
+  const [toolsIndex, configure, status, profiles, constants] = await Promise.all([
     load('tools/index.js'),
     load('tools/configure.js'),
     load('tools/status.js'),
     load('profiles.js'),
+    load('constants.js'),
   ]);
   conductorTools = toolsIndex.conductorTools;
   configureTool = configure.configureTool;
   statusTool = status.statusTool;
   PROFILES = profiles.PROFILES;
+  ENTRY = constants.PACKAGE_NAME;
 });
 
 // The tools resolve the global config from XDG_CONFIG_HOME || ~/.config at

@@ -1,8 +1,8 @@
 {
-  "name": "@joshuakimsey/opencode-conductor",
+  "name": "opencode-fusion-conductor",
   "version": "1.0.0",
   "private": true,
-  "description": "An opencode plugin: a main agent that plans and reviews but cannot edit files, delegating every change to a cheaper sidekick. Cognition's Devin Fusion pattern as a one-line install.",
+  "description": "Fusion Conductor - an opencode plugin: a main agent that plans and reviews but cannot edit files, delegating every change to a cheaper sidekick. Cognition's Devin Fusion pattern as a one-line install.",
   "main": "src/index.js",
   "files": [
     "src"
@@ -17,13 +17,13 @@
     "agent-permissions",
     "llm-cost-optimization"
   ],
-  "homepage": "https://github.com/JoshuaKimsey/opencode-conductor",
+  "homepage": "https://github.com/JoshuaKimsey/opencode-fusion-conductor",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/JoshuaKimsey/opencode-conductor.git"
+    "url": "git+https://github.com/JoshuaKimsey/opencode-fusion-conductor.git"
   },
   "bugs": {
-    "url": "https://github.com/JoshuaKimsey/opencode-conductor/issues"
+    "url": "https://github.com/JoshuaKimsey/opencode-fusion-conductor/issues"
   },
   "scripts": {
     "test": "node --test",
