@@ -58,8 +58,7 @@ copy.
    npm run check-profiles
    ```
 
-4. Publish to npm. `package.json` currently carries `"private": true`, which
-   blocks `npm publish`; flip it to `false`.
+4. Publish to npm:
 
    ```
    npm publish
