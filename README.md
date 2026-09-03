@@ -44,11 +44,11 @@ Manual alternative: add one line to your opencode config yourself
 
 ```json
 {
-  "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]]
+  "plugin": [["opencode-fusion-conductor@1.0.1", { "profile": "opencode-go" }]]
 }
 ```
 
-The `@1.0.0` npm spec form is for after npm publish; the `github:` spec form
+The `@1.0.1` npm spec form is for after npm publish; the `github:` spec form
 above works before publish.
 
 Then fully quit and restart opencode. opencode auto-installs npm plugins via
@@ -130,7 +130,7 @@ All plugin options live in the plugin entry of your `opencode.json`:
 
 ```json
 {
-  "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]]
+  "plugin": [["opencode-fusion-conductor@1.0.1", { "profile": "opencode-go" }]]
 }
 ```
 
@@ -146,7 +146,7 @@ Examples:
 ```jsonc
 // Use a subscription profile, then override one role.
 {
-  "plugin": [["opencode-fusion-conductor@1.0.0", {
+  "plugin": [["opencode-fusion-conductor@1.0.1", {
     "profile": "opencode-go",
     "models": { "sidekick": "opencode-go/deepseek-v4-flash" },
     "audit": true
@@ -157,7 +157,7 @@ Examples:
 ```jsonc
 // Add the Claude Code plan-review bridge.
 {
-  "plugin": [["opencode-fusion-conductor@1.0.0", {
+  "plugin": [["opencode-fusion-conductor@1.0.1", {
     "claude": true
   }]]
 }

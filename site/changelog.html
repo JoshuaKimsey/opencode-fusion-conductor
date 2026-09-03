@@ -117,6 +117,7 @@
              changelog, then run `npm run build:changelog`. -->
         <nav class="docs-toc-nav docs-toc-nav-releases">
           <!-- generated:toc:start -->
+          <a href="#v1-0-1">1.0.1<span class="docs-toc-date">Sep 3, 2026</span></a>
           <a href="#v1-0-0">1.0.0<span class="docs-toc-date">Aug 27, 2026</span></a>
           <a href="#fusion-1-2-0">fusion-1.2.0<span class="docs-toc-date">Aug 24, 2026</span></a>
           <a href="#fusion-1-1-0">fusion-1.1.0<span class="docs-toc-date">Jul 28, 2026</span></a>
@@ -137,11 +138,24 @@
         </header>
 
         <!-- generated:releases:start -->
+        <section id="v1-0-1" class="docs-section release">
+          <div class="release-head">
+            <h2 class="release-version">1.0.1</h2>
+            <time class="release-date" datetime="2026-09-03">September 3, 2026</time>
+            <span class="pill pill-main release-tag">Latest</span>
+          </div>
+          <div class="release-group">
+            <h3 class="release-group-label" data-kind="changed">Changed</h3>
+            <ul class="docs-list release-items">
+              <li>The <code>opencode-go</code> profile now assigns GLM 5.3 Flash to <code>reviewer</code> (previously Grok 4.5).</li>
+            </ul>
+          </div>
+        </section>
+
         <section id="v1-0-0" class="docs-section release">
           <div class="release-head">
             <h2 class="release-version">1.0.0</h2>
             <time class="release-date" datetime="2026-08-27">August 27, 2026</time>
-            <span class="pill pill-main release-tag">Latest</span>
           </div>
           <div class="release-group">
             <h3 class="release-group-label" data-kind="changed">Changed</h3>
@@ -149,7 +163,7 @@
               <li>Forked and rebranded from opencode-fusion v1.2.0 into a real opencode npm plugin distributed as <code>opencode-fusion-conductor</code> (the unscoped <code>opencode-conductor</code> name is taken by NocturnLabs’s unrelated conductor plugin, so we chose the fuller spelling, honoring the opencode-fusion lineage). The skill, installer, and manifest machinery are deleted; the plugin is installed by adding one line to the <code>plugin</code> array of <code>opencode.json</code>, and opencode auto-installs it via Bun at startup. Uninstall is removing that line.</li>
               <li>The <code>fusion-setup</code> / <code>fusion-status</code> commands and the reconfigure interview are replaced by a single <code>/conductor</code> slash command backed by two tools: <code>conductor_configure</code> (deterministically edits the plugin’s own options entry atomically, with a rolling backup at <code>opencode.json.conductor-backup</code>) and <code>conductor_status</code> (a read-only health/config report, including leftover fusion-install hazard detection for migration). The tools serve only the build and plan agents.</li>
               <li>A bare <code>/conductor</code> on an unconfigured install (no profile, no model overrides) now runs a first-run setup interview - profile choice, per-role model overrides, optional <code>audit</code>/<code>claude</code> flags - and applies the answers. Passing arguments still applies changes directly and skips the interview.</li>
-              <li>The <code>opencode-go</code> profile now assigns Qwen 3.8 Max to <code>design</code>, DeepSeek V4 Pro to <code>research</code>, and GLM 5.3 Flash to <code>reviewer</code>.</li>
+              <li>The <code>opencode-go</code> profile now assigns Qwen 3.8 Max to <code>design</code> and DeepSeek V4 Pro to <code>research</code>.</li>
               <li>The <code>fusion-audit</code> plugin is folded into the <code>audit</code> option: an opt-in event hook that logs the delegation tree and aggregates per-agent token usage.</li>
               <li>The <code>fusion-claude</code> plugin is folded into the <code>claude</code> option: an opt-in Claude Code Pro/Max plan-review bridge exposing <code>conductor_claude_status</code> and <code>conductor_claude_review</code>. Requires the official Claude CLI installed and authenticated; the bridge keeps the OAuth credential inside Claude Code.</li>
               <li>The live integration suite now proves schema-removal enforcement with the plugin-injected agents on opencode 1.18.x, not with file-based agent prompts.</li>

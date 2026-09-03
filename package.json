@@ -1,6 +1,6 @@
 {
   "name": "opencode-fusion-conductor",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": false,
   "description": "Fusion Conductor - an opencode plugin: a main agent that plans and reviews but cannot edit files, delegating every change to a cheaper sidekick. Cognition's Devin Fusion pattern as a one-line install.",
   "main": "src/index.js",

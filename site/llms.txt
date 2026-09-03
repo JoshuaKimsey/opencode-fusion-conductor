@@ -27,7 +27,7 @@ Manual alternative: add one line to your opencode config (`~/.config/opencode/op
 
 ```json
 {
-  "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]]
+  "plugin": [["opencode-fusion-conductor@1.0.1", { "profile": "opencode-go" }]]
 }
 ```
 

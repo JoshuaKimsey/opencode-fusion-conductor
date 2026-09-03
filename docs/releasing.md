@@ -8,7 +8,7 @@ How a change gets from a pull request to a published release of
 Users install the published npm package:
 
 ```
-{ "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]] }
+{ "plugin": [["opencode-fusion-conductor@1.0.1", { "profile": "opencode-go" }]] }
 ```
 
 opencode auto-installs npm plugins via Bun at startup, so the package on the
