@@ -502,7 +502,7 @@ describe('conductor_status report', () => {
     assert.match(out, /sidekick: custom\/fast/, 'override wins for its role');
     assert.match(out, /explore: opencode-go\/deepseek-v4-flash/);
     assert.match(out, /plan: unset/, 'roles the profile does not assign stay unset');
-    assert.match(out, /reviewer: opencode-go\/grok-4\.5/);
+    assert.match(out, /reviewer: opencode-go\/glm-5\.3-flash/);
   });
 
   test('a fresh entry with empty options is reported as unconfigured for setup purposes', async () => {

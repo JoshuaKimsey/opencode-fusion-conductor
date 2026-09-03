@@ -464,7 +464,7 @@ describe('profile and model resolution', () => {
     // Roles without an override still come from the profile.
     assert.equal(config.agent.build.model, 'opencode-go/kimi-k3');
     assert.equal(config.agent.design.model, 'opencode-go/qwen3.8-max');
-    assert.equal(config.agent.reviewer.model, 'opencode-go/grok-4.5');
+    assert.equal(config.agent.reviewer.model, 'opencode-go/glm-5.3-flash');
     assert.equal(config.model, 'opencode-go/kimi-k3');
     assert.equal(config.small_model, 'opencode-go/deepseek-v4-flash');
   });

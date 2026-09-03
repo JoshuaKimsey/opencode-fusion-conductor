@@ -35,7 +35,7 @@ export const PROFILES = {
       explore: "opencode-go/deepseek-v4-flash",
       research: "opencode-go/deepseek-v4-pro",
       design: "opencode-go/qwen3.8-max",
-      reviewer: "opencode-go/grok-4.5",
+      reviewer: "opencode-go/glm-5.3-flash",
     },
   },
   "opencode-zen": {

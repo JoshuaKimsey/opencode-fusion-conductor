@@ -31,8 +31,8 @@ This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   overrides) now runs a first-run setup interview - profile choice, per-role
   model overrides, optional `audit`/`claude` flags - and applies the answers.
   Passing arguments still applies changes directly and skips the interview.
-- The `opencode-go` profile now assigns Qwen 3.8 Max to `design` and DeepSeek
-  V4 Pro to `research`.
+- The `opencode-go` profile now assigns Qwen 3.8 Max to `design`, DeepSeek
+  V4 Pro to `research`, and GLM 5.3 Flash to `reviewer`.
 - The `fusion-audit` plugin is folded into the `audit` option: an opt-in event
   hook that logs the delegation tree and aggregates per-agent token usage.
 - The `fusion-claude` plugin is folded into the `claude` option: an opt-in

@@ -115,7 +115,7 @@ The team below is injected by the plugin at startup. Models are resolved per rol
 | `explore` | Fast read-only exploration (opencode's built-in agent; model-only) | subagent | `opencode-go/deepseek-v4-flash` |
 | `research` | Read-only external research (web, docs) | subagent | `opencode-go/deepseek-v4-pro` |
 | `design` | Frontend/UI implementation | subagent | `opencode-go/qwen3.8-max` |
-| `reviewer` | Critique a plan before implementation; audit a diff before commit | subagent | `opencode-go/grok-4.5` |
+| `reviewer` | Critique a plan before implementation; audit a diff before commit | subagent | `opencode-go/glm-5.3-flash` |
 | `vision` | Transcribe images the main model cannot see | subagent (hidden) | unset by default |
 
 `build` and `plan` are the primaries. `build` is the restricted main agent: `edit`, `grep`, `glob`, and `list` are denied, bash is deny-by-default with a verification + git allowlist, and `git commit`/`git push` require user approval. `sidekick` is the executor. `explore` is opencode's built-in read-only agent - the plugin only assigns it a model, never a full definition. `research`, `design`, `reviewer`, and `vision` are optional specialists; a profile (or a `models` override) decides which get a model.
