@@ -223,13 +223,13 @@
                   <td><code>research</code></td>
                   <td>Read-only web / docs research</td>
                   <td>Optional</td>
-                  <td><code>opencode-go/kimi-k2.7-code</code></td>
+                  <td><code>opencode-go/deepseek-v4-pro</code></td>
                 </tr>
                 <tr>
                   <td><code>design</code></td>
                   <td>Frontend / UI implementation</td>
                   <td>Optional</td>
-                  <td><code>opencode-go/kimi-k3</code></td>
+                  <td><code>opencode-go/qwen3.8-max</code></td>
                 </tr>
                 <tr>
                   <td><code>reviewer</code></td>
@@ -301,12 +301,12 @@
             <pre class="command-pre"><code id="docs-cmd-opencode">{ "plugin": [["opencode-fusion-conductor@1.0.0", { "profile": "opencode-go" }]] }</code></pre>
           </div>
 
-          <p class="docs-note">Works on Windows, macOS, and Linux. No skill, no installer, no interview. Uninstall by removing the line and restarting.</p>
+          <p class="docs-note">Works on Windows, macOS, and Linux. No skill, no installer; a bare <code>/conductor</code> runs the first-run setup interview in chat. Uninstall by removing the line and restarting.</p>
 
           <h3>The /conductor command</h3>
-          <p>The plugin injects a <code>/conductor</code> slash command. With no arguments it runs <code>conductor_status</code>, a read-only report of where the plugin entry lives, the effective role-to-model resolution, and any leftover fusion-install hazards. With arguments it calls <code>conductor_configure</code>, which edits the plugin's own options atomically (a rolling backup at <code>opencode.json.conductor-backup</code>):</p>
+          <p>The plugin injects a <code>/conductor</code> slash command. On a fresh install (no profile, no model overrides) a bare <code>/conductor</code> runs a first-run setup interview — profile choice, per-role model overrides, optional <code>audit</code>/<code>claude</code> flags — and applies your answers. Once configured, or when you pass arguments, it skips the interview: with no arguments it runs <code>conductor_status</code>, a read-only report of where the plugin entry lives, the effective role-to-model resolution, and any leftover fusion-install hazards. With arguments it calls <code>conductor_configure</code>, which edits the plugin's own options atomically (a rolling backup at <code>opencode.json.conductor-backup</code>):</p>
           <ul class="docs-list">
-            <li><code>/conductor</code> — status report only.</li>
+            <li><code>/conductor</code> — status report once configured; the setup interview when unconfigured.</li>
             <li><code>/conductor sidekick=opencode-go/deepseek-v4-flash</code> — set per-role model overrides.</li>
             <li><code>/conductor profile chatgpt</code> — switch the subscription profile.</li>
             <li><code>/conductor audit=true claude=true</code> — toggle the optional feature flags.</li>

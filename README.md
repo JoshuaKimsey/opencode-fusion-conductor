@@ -52,8 +52,9 @@ The `@1.0.0` npm spec form is for after npm publish; the `github:` spec form
 above works before publish.
 
 Then fully quit and restart opencode. opencode auto-installs npm plugins via
-Bun at startup, so there is no skill, no installer, and no interview. The
-plugin injects the agent team and the `/conductor` command on the next launch.
+Bun at startup, so there is no skill and no installer. The plugin injects the
+agent team and the `/conductor` command on the next launch; a bare `/conductor`
+on an unconfigured install runs the first-run setup interview in chat.
 
 That is the whole install. **Uninstall** by removing the line and restarting.
 
@@ -112,8 +113,8 @@ The team below is injected by the plugin at startup. Models are resolved per rol
 | `plan` | Plan mode: same brain as build, plans but does not execute | primary | `opencode-go/kimi-k3` |
 | `sidekick` | Execute edits and commands | subagent | `opencode-go/deepseek-v4-flash` |
 | `explore` | Fast read-only exploration (opencode's built-in agent; model-only) | subagent | `opencode-go/deepseek-v4-flash` |
-| `research` | Read-only external research (web, docs) | subagent | `opencode-go/kimi-k2.7-code` |
-| `design` | Frontend/UI implementation | subagent | `opencode-go/kimi-k3` |
+| `research` | Read-only external research (web, docs) | subagent | `opencode-go/deepseek-v4-pro` |
+| `design` | Frontend/UI implementation | subagent | `opencode-go/qwen3.8-max` |
 | `reviewer` | Critique a plan before implementation; audit a diff before commit | subagent | `opencode-go/grok-4.5` |
 | `vision` | Transcribe images the main model cannot see | subagent (hidden) | unset by default |
 
@@ -166,8 +167,8 @@ Examples:
 
 The plugin injects a `/conductor` command that reports or edits the plugin's own options atomically (a rolling backup is written to `opencode.json.conductor-backup` before any change).
 
-- **No arguments** -> `conductor_status`, a read-only report: where the plugin entry lives, its raw options, the effective role -> model resolution, leftover fusion-install hazards, and the pinned plugin version.
-- **With arguments** -> `conductor_configure` edits the plugin's options in `opencode.json`. Supported forms:
+- **No arguments** -> `conductor_status`, a read-only report: where the plugin entry lives, its raw options, the effective role -> model resolution, leftover fusion-install hazards, and the pinned plugin version. If the setup state is `unconfigured` (no profile and no model overrides), a bare `/conductor` instead runs a first-run setup interview - profile choice from the status report's available-profiles list, per-role model overrides, and the optional `audit`/`claude` flags - then applies your answers and tells you to restart.
+- **With arguments** -> applies changes directly, skipping the interview: `conductor_configure` edits the plugin's options in `opencode.json`. Supported forms:
   - role=model pairs: `/conductor sidekick=opencode-go/deepseek-v4-flash explore=opencode-go/deepseek-v4-flash`
   - a profile: `/conductor profile chatgpt`
   - flags: `/conductor audit=true claude=true`

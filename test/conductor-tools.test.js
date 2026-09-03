@@ -505,6 +505,64 @@ describe('conductor_status report', () => {
     assert.match(out, /reviewer: opencode-go\/grok-4\.5/);
   });
 
+  test('a fresh entry with empty options is reported as unconfigured for setup purposes', async () => {
+    const projectDir = makeProject();
+    projectWithEntry(projectDir);
+    const out = await status({ directory: projectDir });
+    assert.ok(
+      out.includes(
+        'Setup state: unconfigured (no profile, no model overrides - run /conductor with no arguments to set up, or pass arguments directly)'
+      ),
+      'a fresh entry must carry the unconfigured setup-state line'
+    );
+  });
+
+  test('a configured entry (profile and/or models) is reported as configured', async () => {
+    const profileDir = makeProject();
+    projectWithEntry(profileDir, { options: { profile: 'chatgpt' } });
+    let out = await status({ directory: profileDir });
+    assert.ok(out.includes('Setup state: configured (profile: chatgpt, no model overrides)'));
+
+    const modelsDir = makeProject();
+    projectWithEntry(modelsDir, { options: { models: { sidekick: 'custom/fast' } } });
+    out = await status({ directory: modelsDir });
+    assert.ok(out.includes('Setup state: configured (no profile, 1 model override)'));
+
+    const bothDir = makeProject();
+    projectWithEntry(bothDir, {
+      options: { profile: 'opencode-go', models: { sidekick: 'custom/fast', explore: 'custom/e' } },
+    });
+    out = await status({ directory: bothDir });
+    assert.ok(out.includes('Setup state: configured (profile: opencode-go, 2 model overrides)'));
+  });
+
+  test('audit/claude-only options still count as unconfigured for setup purposes', async () => {
+    const projectDir = makeProject();
+    projectWithEntry(projectDir, { options: { audit: true, claude: true } });
+    const out = await status({ directory: projectDir });
+    assert.ok(
+      out.includes('Setup state: unconfigured (no profile, no model overrides'),
+      'feature flags alone must not flip the setup state to configured'
+    );
+  });
+
+  test('the report lists every available profile with its assignments', async () => {
+    const projectDir = makeProject();
+    projectWithEntry(projectDir);
+    const out = await status({ directory: projectDir });
+    assert.ok(out.includes('Available profiles:'), 'report must carry the Available profiles section');
+    for (const [name, profile] of Object.entries(PROFILES)) {
+      assert.ok(out.includes(name), `profile "${name}" must be listed`);
+      for (const [role, model] of Object.entries(profile.agents)) {
+        assert.ok(out.includes(`${role}=${model}`), `"${name}" must list ${role}=${model}`);
+      }
+      assert.ok(
+        out.includes(`small_model=${profile.small_model}`),
+        `"${name}" must list its small_model`
+      );
+    }
+  });
+
   test('reports the pinned version spec on the entry', async () => {
     const projectDir = makeProject();
     const file = projectWithEntry(projectDir, { options: { profile: 'chatgpt' }, version: '1.4.2' });

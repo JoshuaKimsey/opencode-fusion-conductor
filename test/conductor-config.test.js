@@ -207,6 +207,27 @@ describe('applyConductor injection', () => {
     assert.ok(config.command.conductor.template.includes('$ARGUMENTS'));
   });
 
+  test('the /conductor template drives status, configure, and the setup interview', () => {
+    const template = mods.COMMANDS.conductor.template;
+    assert.ok(template.includes('conductor_status'), 'template must call conductor_status first');
+    assert.ok(template.includes('conductor_configure'), 'template must drive conductor_configure');
+    assert.ok(
+      template.includes('Restart opencode for changes to take effect.'),
+      'template must keep the restart reminder'
+    );
+    assert.ok(template.includes('Setup state'), 'template must branch on the status Setup state line');
+    assert.ok(template.includes('UNCONFIGURED'), 'template must branch on the unconfigured state');
+    assert.ok(template.includes('SETUP INTERVIEW'), 'template must name the setup interview branch');
+    assert.ok(
+      template.includes('Available profiles'),
+      'template must source the profile list from the status report'
+    );
+    assert.ok(
+      template.includes('none of these - I\'ll pick models per role'),
+      'template must offer the pick-models-per-role escape hatch'
+    );
+  });
+
   test('build denies edit, grep, glob, and list in the injected config', () => {
     const permission = applyConductor({}).agent.build.permission;
     for (const key of ['edit', 'grep', 'glob', 'list']) {
@@ -442,7 +463,7 @@ describe('profile and model resolution', () => {
     assert.deepEqual(config.agent.explore, { model: 'custom/explore' });
     // Roles without an override still come from the profile.
     assert.equal(config.agent.build.model, 'opencode-go/kimi-k3');
-    assert.equal(config.agent.design.model, 'opencode-go/kimi-k3');
+    assert.equal(config.agent.design.model, 'opencode-go/qwen3.8-max');
     assert.equal(config.agent.reviewer.model, 'opencode-go/grok-4.5');
     assert.equal(config.model, 'opencode-go/kimi-k3');
     assert.equal(config.small_model, 'opencode-go/deepseek-v4-flash');

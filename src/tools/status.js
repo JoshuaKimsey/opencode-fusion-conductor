@@ -10,6 +10,7 @@ import path from "node:path";
 import { tool } from "@opencode-ai/plugin";
 import { PACKAGE_NAME, KNOWN_ROLES } from "../constants.js";
 import { resolveRoleModels } from "../resolve.js";
+import { PROFILES } from "../profiles.js";
 import {
   configDir,
   copyObject,
@@ -54,6 +55,15 @@ function statusReport(directory) {
   let storedOptions = {};
   if (found.found) {
     storedOptions = copyObject(isPlainObject(found.options) ? found.options : {});
+  }
+
+  // Setup state near the top so the /conductor command template can branch on
+  // it: unconfigured means the stored options carry neither a profile nor any
+  // model overrides (audit/claude are feature flags and do not count), so a
+  // bare /conductor run fires the first-run setup interview.
+  lines.push(`Setup state: ${setupStateLine(storedOptions)}`);
+
+  if (found.found) {
     lines.push(`Config file: ${found.file}`);
     lines.push(
       `Plugin entry: ${found.spec}${found.version ? ` (version pin: ${found.version})` : " (no version pin)"}`
@@ -121,5 +131,37 @@ function statusReport(directory) {
   if (hazards.length === 0) hazards.push("none detected");
   for (const hazard of hazards) lines.push(`  ${hazard}`);
 
+  // (d) Static reference data: every selectable profile with its assignments,
+  // one line per profile. The /conductor setup interview presents this list
+  // verbatim instead of hardcoding profile names or models.
+  lines.push("Available profiles:");
+  for (const [name, profile] of Object.entries(PROFILES)) {
+    const parts = Object.entries(profile.agents).map(([role, model]) => `${role}=${model}`);
+    parts.push(`small_model=${profile.small_model}`);
+    lines.push(`  ${name}: ${parts.join(", ")}`);
+  }
+
   return lines.join("\n");
+}
+
+// Setup state drives the /conductor command's branching: unconfigured (no
+// profile AND no model overrides in the stored options) fires the first-run
+// setup interview; anything else counts as configured. The audit/claude
+// booleans are feature flags, not model setup, and never flip the state.
+function setupStateLine(storedOptions) {
+  const hasProfile = storedOptions.profile !== undefined;
+  const models = isPlainObject(storedOptions.models) ? storedOptions.models : {};
+  const overrideCount = Object.keys(models).length;
+  if (hasProfile || overrideCount > 0) {
+    const bits = [
+      hasProfile ? `profile: ${storedOptions.profile}` : "no profile",
+      overrideCount === 0
+        ? "no model overrides"
+        : overrideCount === 1
+          ? "1 model override"
+          : `${overrideCount} model overrides`,
+    ];
+    return `configured (${bits.join(", ")})`;
+  }
+  return "unconfigured (no profile, no model overrides - run /conductor with no arguments to set up, or pass arguments directly)";
 }

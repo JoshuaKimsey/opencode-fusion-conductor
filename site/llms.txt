@@ -31,7 +31,7 @@ Manual alternative: add one line to your opencode config (`~/.config/opencode/op
 }
 ```
 
-Then fully quit and restart opencode. opencode auto-installs npm plugins via Bun at startup, so there is no skill, no installer, and no interview. The plugin injects the agent team and the `/conductor` command on the next launch. Uninstall by removing the line and restarting.
+Then fully quit and restart opencode. opencode auto-installs npm plugins via Bun at startup, so there is no skill and no installer. The plugin injects the agent team and the `/conductor` command on the next launch; a bare `/conductor` on an unconfigured install runs the first-run setup interview in chat. Uninstall by removing the line and restarting.
 
 Silent-failure note: on opencode 1.18.x, a plugin install that fails at startup exits normally and logs nothing (even with `--log-level DEBUG --print-logs`) - opencode just runs with stock agents. Fingerprint: an empty `~/.cache/opencode/packages/<spec>/` (no `node_modules`). Ensure git is on PATH and github.com is reachable, delete the empty dir, retry; the `opencode plugin ...` CLI does not swallow this error.
 
@@ -57,3 +57,4 @@ Coming from opencode-fusion? Say `undo fusion` with the old fusion-setup skill f
 10. Bundled subscription profiles (`opencode-go`, `opencode-zen`, `opencode-zen-free`, `chatgpt`, `github-copilot`) are applied via the `profile` option; the `models` option overrides per role. Provider auth stays out-of-band via `opencode auth login` — profiles never contain keys.
 11. The `audit` option (boolean, off by default) enables a hook that logs the delegation tree and per-agent token usage. The `claude` option (boolean, off by default) enables the Claude Code bridge tools `conductor_claude_status`/`conductor_claude_review`, which require the Claude Pro/Max CLI installed and authenticated.
 12. Targets opencode 1.18.x. OpenCode 2 (beta) is not supported: its plugin API differs and permission enforcement is call-time rather than schema-removal. A v2 port is planned. Known upstream flake: anomalyco/opencode#30955 (rare config-hook/agent-registry race on first delegation; retry resolves it).
+13. First-run setup: a bare `/conductor` on an unconfigured install (no profile, no model overrides) runs a setup interview - profile choice from the status report's available-profiles list, per-role model overrides, and optional `audit`/`claude` flags - then applies the answers via `conductor_configure` and tells you to restart. Passing arguments directly applies them and skips the interview.
