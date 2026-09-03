@@ -71,13 +71,15 @@ copy.
 
    ```
    git switch main && git pull --ff-only
-   git tag -a vX.Y.Z -m "opencode-fusion-conductor X.Y.Z"
-   git push origin vX.Y.Z
-   gh release create vX.Y.Z --title "vX.Y.Z" --latest --notes-file <file>
+   git tag -a fusion-conductor-vX.Y.Z -m "opencode-fusion-conductor X.Y.Z"
+   git push origin fusion-conductor-vX.Y.Z
+   gh release create fusion-conductor-vX.Y.Z --title "fusion-conductor-vX.Y.Z" --latest --notes-file <file>
    ```
 
    Tag the merge commit, not an earlier one, so the tag contains the changelog
-   entry that describes it.
+   entry that describes it. This repo inherited the upstream tags `v1.0.0`,
+   `v1.1.0`, and `v1.2.0` from the old `opencode-fusion` releases, so release
+   tags carry the `fusion-conductor-` prefix to avoid colliding with them.
 
 Because the release also touches `site/`, merging triggers a Pages deploy at
 https://joshuakimsey.github.io/opencode-fusion-conductor/. Check the published
