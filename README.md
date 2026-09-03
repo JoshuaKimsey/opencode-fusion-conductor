@@ -180,6 +180,37 @@ The plugin injects a `/conductor` command that reports or edits the plugin's own
 > edits the config and always tells you to restart. This is a platform
 > limitation, not a bug in the plugin.
 
+### Updating
+
+The plugin CLI has no update or remove subcommands - the only form is
+`opencode plugin <module> [-g] [-f]`. To update a version-pinned install, run
+the pinned command with `-f`:
+
+```bash
+opencode plugin opencode-fusion-conductor@1.0.2 -g -f
+```
+
+The `-f`/`--force` flag is required: without it the CLI prints "Already
+configured in ..." and leaves the old entry in place (while still caching the
+new version); with it the entry is replaced in place, never duplicated. Restart
+opencode after. The old version's cache dir
+(`~/.cache/opencode/packages/<pkg>@<old-ver>/`) lingers harmlessly - remove it
+with `rm -rf` for hygiene.
+
+An unpinned entry freezes: opencode never re-resolves `latest` after first
+install (upstream [anomalyco/opencode#16608](https://github.com/anomalyco/opencode/issues/16608)
+- the `<pkg>@latest/` cache dir short-circuits resolution). Update it by
+clearing the cache and restarting (opencode reinstalls latest), or migrate to a
+pin with the `-f` command above:
+
+```bash
+rm -rf ~/.cache/opencode/packages/opencode-fusion-conductor@latest
+```
+
+Removal has no CLI support either: delete the entry from the `plugin` array in
+opencode.json, then optionally `rm -rf
+~/.cache/opencode/packages/opencode-fusion-conductor@*`.
+
 ## Enforced vs. advised
 
 The pattern's guarantees live in two different layers, and being precise about which is which answers most "what if the model just ignores the instructions?" questions.

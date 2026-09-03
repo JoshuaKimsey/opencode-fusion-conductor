@@ -82,6 +82,13 @@ describe('docs consistency', () => {
     );
   });
 
+  test('README documents the version-pinned force-update command', () => {
+    assert.ok(
+      readme.includes('opencode plugin opencode-fusion-conductor@1.0.2 -g -f'),
+      'README must carry the version-pinned force-update command "opencode plugin opencode-fusion-conductor@1.0.2 -g -f"'
+    );
+  });
+
   test('README keeps the upstream attribution', () => {
     assert.match(readme, /opencode-fusion/, 'README must credit the opencode-fusion fork');
     assert.match(readme, /mihneaptu/, 'README must keep the upstream author attribution');
