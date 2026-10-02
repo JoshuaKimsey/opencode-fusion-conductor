@@ -10,24 +10,33 @@ const root = path.join(__dirname, '..');
 let mods;
 before(async () => {
   const load = (name) => import(pathToFileURL(path.join(root, 'src', name)).href);
-  const [agents, profiles, config, commands] = await Promise.all([
+  const [agents, profiles, config, commands, permissions, resolve] = await Promise.all([
     load('agents.js'),
     load('profiles.js'),
     load('config.js'),
     load('commands.js'),
+    load('permissions.js'),
+    load('resolve.js'),
   ]);
   mods = {
     AGENTS: agents.AGENTS,
     PROFILES: profiles.PROFILES,
-    applyConductor: config.applyConductor,
+    resolveAgentDefinitions: config.resolveAgentDefinitions,
+    registerConductor: config.registerConductor,
+    ROLES: config.ROLES,
     COMMANDS: commands.COMMANDS,
+    toPermissions: permissions.toPermissions,
+    parseModelRef: resolve.parseModelRef,
   };
 });
 
 // mods is populated by the before() hook above; tests run after it resolves.
-const applyConductor = (...args) => mods.applyConductor(...args);
+const resolveAgentDefinitions = (...args) => mods.resolveAgentDefinitions(...args);
 
-// --- hand-rolled pattern matchers (ported from contracts.test.js) -------------
+// --- hand-rolled pattern matchers -------------------------------------------
+// V2 evaluates ordered permission rules last-match-wins. `*` spans `/`,
+// `?` is one char, and a shell pattern ending in " *" also matches the bare
+// command (mirrors the documented V2 matching).
 
 function wildcardMatches(pattern, command) {
   const normalizedPattern = pattern.replaceAll('\\', '/');
@@ -39,20 +48,22 @@ function wildcardMatches(pattern, command) {
   if (source.endsWith(' .*')) {
     source = source.slice(0, -3) + '( .*)?';
   }
-  // Case-sensitive on every platform, mirroring the source contracts.
   return new RegExp(`^${source}$`, 's').test(normalizedCommand);
 }
 
-// Last-match-wins over insertion-ordered entries.
-function resolveBashRule(bashMap, command) {
-  return Object.entries(bashMap).reduce(
-    (decision, [pattern, value]) => (wildcardMatches(pattern, command) ? value : decision),
-    undefined
-  );
+// Last-match-wins over the ordered rule array, filtered to one action.
+function resolveRule(rules, action, resource) {
+  let decision;
+  for (const rule of rules) {
+    if (rule.action === action && wildcardMatches(rule.resource, resource)) {
+      decision = rule.effect;
+    }
+  }
+  return decision;
 }
 
-// The exact key order the build bash map must keep (YAML source order).
-const BUILD_BASH_KEYS = [
+// The exact rule order the build shell allowlist must keep.
+const BUILD_SHELL_RESOURCES = [
   '*',
   'npm run lint*',
   'npm test*',
@@ -110,7 +121,7 @@ const BUILD_BASH_KEYS = [
 
 const ROLES = ['build', 'plan', 'sidekick', 'research', 'design', 'reviewer', 'vision'];
 
-const TASK_MAPS = {
+const SUBAGENT_MAPS = {
   build: ['sidekick', 'explore', 'research', 'design', 'reviewer', 'vision'],
   plan: ['explore', 'research', 'reviewer'],
   sidekick: ['explore', 'research'],
@@ -125,15 +136,15 @@ describe('AGENTS ported from agent/*.md', () => {
     for (const role of ROLES) {
       const agent = mods.AGENTS[role];
       assert.equal(typeof agent.description, 'string', `${role} missing description`);
-      assert.equal(typeof agent.prompt, 'string', `${role} missing prompt`);
-      assert.equal(typeof agent.permission, 'object', `${role} missing permission`);
+      assert.equal(typeof agent.system, 'string', `${role} missing system prompt`);
+      assert.equal(typeof agent.permission, 'object', `${role} missing permission map`);
       assert.ok(!('model' in agent), `${role} must not carry a model field (models come from profiles/options)`);
     }
   });
 
   test('rename is complete: no bare Fusion and no fusion_/fusion- identifiers remain', () => {
     for (const role of ROLES) {
-      const text = `${mods.AGENTS[role].prompt} ${mods.AGENTS[role].description}`;
+      const text = `${mods.AGENTS[role].system} ${mods.AGENTS[role].description}`;
       for (const match of text.matchAll(/Fusion/g)) {
         assert.ok(
           text.slice(Math.max(0, match.index - 6), match.index) === 'Devin ',
@@ -146,7 +157,16 @@ describe('AGENTS ported from agent/*.md', () => {
     // The renamed identifiers must be the ones the plugin surface uses.
     assert.equal(mods.AGENTS.build.permission.conductor_claude_status, 'allow');
     assert.equal(mods.AGENTS.build.permission.conductor_claude_review, 'allow');
-    assert.ok(mods.AGENTS.build.prompt.includes('`conductor_claude_review`'));
+    assert.ok(mods.AGENTS.build.system.includes('`conductor_claude_review`'));
+  });
+
+  test('V2 tool names are used in the prompts: subagent, not task; shell, not bash', () => {
+    for (const role of ROLES) {
+      const text = `${mods.AGENTS[role].system} ${mods.AGENTS[role].description}`;
+      assert.ok(!/\\`task\\`/.test(text.replace(/`subagent`/g, '')), `${role} still names the V1 task tool`);
+    }
+    assert.ok(mods.AGENTS.build.system.includes('`subagent`'), 'build must delegate via the subagent tool');
+    assert.ok(mods.AGENTS.build.system.includes('`shell`'), 'build must name the shell tool');
   });
 
   test('build denies edit, grep, glob, and list', () => {
@@ -170,8 +190,8 @@ describe('AGENTS ported from agent/*.md', () => {
     assert.equal(vision.permission.task, 'deny');
   });
 
-  test('build prompt still carries the discipline contracts', () => {
-    const body = mods.AGENTS.build.prompt;
+  test('build system prompt still carries the discipline contracts', () => {
+    const body = mods.AGENTS.build.system;
     const lower = body.toLowerCase();
     const parts = ['objective', 'files', 'interfaces', 'constraints', 'verification'];
     for (const part of parts) {
@@ -187,8 +207,8 @@ describe('AGENTS ported from agent/*.md', () => {
   });
 
   test('the raw AGENTS constant does not yet wire the conductor tools', () => {
-    // The wiring happens at injection time (applyConductor) so the shared
-    // constant stays a clean port.
+    // The wiring happens at injection time (resolveAgentDefinitions) so the
+    // shared constant stays a clean port.
     for (const role of ROLES) {
       assert.ok(!('conductor_configure' in mods.AGENTS[role].permission), `${role} must not bake conductor_configure into AGENTS`);
       assert.ok(!('conductor_status' in mods.AGENTS[role].permission), `${role} must not bake conductor_status into AGENTS`);
@@ -196,87 +216,125 @@ describe('AGENTS ported from agent/*.md', () => {
   });
 });
 
-describe('applyConductor injection', () => {
-  test('injects exactly the seven agents plus the conductor command', () => {
-    const config = applyConductor({});
-    assert.deepEqual(Object.keys(config.agent).sort(), [...ROLES].sort());
-    assert.deepEqual(Object.keys(config.command), ['conductor']);
-    assert.equal(config.command.conductor, mods.COMMANDS.conductor);
-    assert.equal(typeof config.command.conductor.description, 'string');
-    assert.equal(typeof config.command.conductor.template, 'string');
-    assert.ok(config.command.conductor.template.includes('$ARGUMENTS'));
+describe('toPermissions V1-map to V2-array conversion', () => {
+  test('scalar tool keys become action rules with resource "*"', () => {
+    const rules = mods.toPermissions({ edit: 'deny', grep: 'deny', webfetch: 'allow' }, 'deny');
+    assert.deepEqual(rules.slice(0, 3), [
+      { action: 'edit', resource: '*', effect: 'deny' },
+      { action: 'grep', resource: '*', effect: 'deny' },
+      { action: 'webfetch', resource: '*', effect: 'allow' },
+    ]);
   });
 
-  test('the /conductor template drives status, configure, and the setup interview', () => {
-    const template = mods.COMMANDS.conductor.template;
-    assert.ok(template.includes('conductor_status'), 'template must call conductor_status first');
-    assert.ok(template.includes('conductor_configure'), 'template must drive conductor_configure');
-    assert.ok(
-      template.includes('Restart opencode for changes to take effect.'),
-      'template must keep the restart reminder'
-    );
-    assert.ok(template.includes('Setup state'), 'template must branch on the status Setup state line');
-    assert.ok(template.includes('UNCONFIGURED'), 'template must branch on the unconfigured state');
-    assert.ok(template.includes('SETUP INTERVIEW'), 'template must name the setup interview branch');
-    assert.ok(
-      template.includes('Available profiles'),
-      'template must source the profile list from the status report'
-    );
-    assert.ok(
-      template.includes('none of these - I\'ll pick models per role'),
-      'template must offer the pick-models-per-role escape hatch'
-    );
+  test('bash maps become ordered shell rules and task maps become subagent rules', () => {
+    const rules = mods.toPermissions({ bash: { '*': 'deny', 'git status*': 'allow' }, task: { '*': 'deny', sidekick: 'allow' } }, 'allow');
+    assert.deepEqual(rules.filter((r) => r.action === 'shell'), [
+      { action: 'shell', resource: '*', effect: 'deny' },
+      { action: 'shell', resource: 'git status*', effect: 'allow' },
+    ]);
+    assert.deepEqual(rules.filter((r) => r.action === 'subagent'), [
+      { action: 'subagent', resource: '*', effect: 'deny' },
+      { action: 'subagent', resource: 'sidekick', effect: 'allow' },
+    ]);
   });
 
-  test('build denies edit, grep, glob, and list in the injected config', () => {
-    const permission = applyConductor({}).agent.build.permission;
-    for (const key of ['edit', 'grep', 'glob', 'list']) {
-      assert.equal(permission[key], 'deny');
+  test('deny-all bash/task strings become single deny-all rules', () => {
+    const rules = mods.toPermissions({ bash: 'deny', task: 'deny' }, 'deny');
+    assert.deepEqual(rules.slice(0, 2), [
+      { action: 'shell', resource: '*', effect: 'deny' },
+      { action: 'subagent', resource: '*', effect: 'deny' },
+    ]);
+  });
+
+  test('conductor tool rules are appended with the given effect', () => {
+    const rules = mods.toPermissions({ edit: 'deny' }, 'allow');
+    assert.deepEqual(rules.slice(-2), [
+      { action: 'conductor_configure', resource: '*', effect: 'allow' },
+      { action: 'conductor_status', resource: '*', effect: 'allow' },
+    ]);
+    const denied = mods.toPermissions({ edit: 'allow' }, 'deny');
+    assert.deepEqual(denied.slice(-2), [
+      { action: 'conductor_configure', resource: '*', effect: 'deny' },
+      { action: 'conductor_status', resource: '*', effect: 'deny' },
+    ]);
+  });
+});
+
+describe('parseModelRef', () => {
+  test('parses provider/model and provider/model#variant', () => {
+    assert.deepEqual(mods.parseModelRef('opencode-go/kimi-k3'), { providerID: 'opencode-go', id: 'kimi-k3' });
+    assert.deepEqual(mods.parseModelRef('anthropic/claude-sonnet-4-5#high'), {
+      providerID: 'anthropic', id: 'claude-sonnet-4-5', variant: 'high',
+    });
+  });
+
+  test('refuses malformed references', () => {
+    for (const bad of ['nope', '/x', 'x/', 'a b/c', '']) {
+      assert.throws(() => mods.parseModelRef(bad), /provider\/model-id/);
+    }
+  });
+});
+
+describe('resolveAgentDefinitions', () => {
+  test('resolves exactly the seven agents with V2 system/permissions fields', () => {
+    const { defs } = resolveAgentDefinitions({});
+    assert.deepEqual(Object.keys(defs).sort(), [...ROLES].sort());
+    for (const role of ROLES) {
+      assert.equal(typeof defs[role].description, 'string');
+      assert.equal(typeof defs[role].system, 'string');
+      assert.ok(Array.isArray(defs[role].permissions), `${role} permissions must be a V2 array`);
     }
   });
 
-  test('injected bash maps keep their source wildcard-first key order', () => {
-    const config = applyConductor({});
-    // Deny-by-default maps lead with "*": "deny".
+  test('build denies edit, grep, glob, and list in the resolved permissions', () => {
+    const { defs } = resolveAgentDefinitions({});
+    for (const action of ['edit', 'grep', 'glob', 'list']) {
+      assert.equal(resolveRule(defs.build.permissions, action, 'anything'), 'deny');
+    }
+  });
+
+  test('resolved shell rules keep their source wildcard-first order', () => {
+    const { defs } = resolveAgentDefinitions({});
+    // Deny-by-default maps lead with "*": deny.
     for (const role of ['build', 'plan', 'reviewer']) {
-      const bash = config.agent[role].permission.bash;
-      assert.equal(typeof bash, 'object', `${role} bash must be a rule map`);
-      const keys = Object.keys(bash);
-      assert.equal(keys[0], '*', `${role} bash wildcard deny must appear first`);
-      assert.equal(bash['*'], 'deny');
+      const shell = defs[role].permissions.filter((r) => r.action === 'shell');
+      assert.equal(shell[0].resource, '*', `${role} shell wildcard deny must appear first`);
+      assert.equal(shell[0].effect, 'deny');
     }
-    // Allow-by-default executors lead with "*": "allow" (source contract).
+    // Allow-by-default executors lead with "*": allow (source contract).
     for (const role of ['sidekick', 'design']) {
-      const bash = config.agent[role].permission.bash;
-      assert.equal(typeof bash, 'object', `${role} bash must be a rule map`);
-      const keys = Object.keys(bash);
-      assert.equal(keys[0], '*', `${role} bash wildcard must appear first`);
-      assert.equal(bash['*'], 'allow');
+      const shell = defs[role].permissions.filter((r) => r.action === 'shell');
+      assert.equal(shell[0].resource, '*', `${role} shell wildcard must appear first`);
+      assert.equal(shell[0].effect, 'allow');
     }
     for (const role of ['research', 'vision']) {
-      assert.equal(config.agent[role].permission.bash, 'deny', `${role} bash must be a full deny`);
+      assert.deepEqual(
+        defs[role].permissions.filter((r) => r.action === 'shell'),
+        [{ action: 'shell', resource: '*', effect: 'deny' }],
+        `${role} shell must be a full deny`
+      );
     }
   });
 
-  test('task maps are wildcard deny plus exact named allows', () => {
-    const config = applyConductor({});
-    for (const [role, allows] of Object.entries(TASK_MAPS)) {
-      const task = config.agent[role].permission.task;
-      const keys = Object.keys(task);
-      assert.equal(keys[0], '*', `${role} task wildcard deny must appear first`);
-      assert.equal(task['*'], 'deny');
-      assert.deepEqual(keys.filter((k) => k !== '*').sort(), [...allows].sort(), `${role} task allows mismatch`);
-      for (const name of keys) {
-        if (name !== '*') assert.equal(task[name], 'allow', `${role} task.${name} must be allow`);
-      }
+  test('subagent rules are wildcard deny plus exact named allows', () => {
+    const { defs } = resolveAgentDefinitions({});
+    for (const [role, allows] of Object.entries(SUBAGENT_MAPS)) {
+      const sub = defs[role].permissions.filter((r) => r.action === 'subagent');
+      assert.equal(sub[0].resource, '*', `${role} subagent wildcard deny must appear first`);
+      assert.equal(sub[0].effect, 'deny');
+      assert.deepEqual(sub.slice(1).map((r) => r.resource).sort(), [...allows].sort(), `${role} subagent allows mismatch`);
+      for (const rule of sub.slice(1)) assert.equal(rule.effect, 'allow');
     }
-    assert.equal(config.agent.vision.permission.task, 'deny');
+    assert.deepEqual(
+      defs.vision.permissions.filter((r) => r.action === 'subagent'),
+      [{ action: 'subagent', resource: '*', effect: 'deny' }]
+    );
   });
 
   test('executors deny git commit and git push entirely', () => {
-    const config = applyConductor({});
+    const { defs } = resolveAgentDefinitions({});
     for (const role of ['sidekick', 'design']) {
-      const bash = config.agent[role].permission.bash;
+      const rules = defs[role].permissions;
       for (const command of [
         'git commit -m change',
         'git -C . commit -m change',
@@ -286,29 +344,28 @@ describe('applyConductor injection', () => {
         'git.exe push origin main',
         'git.exe -C . commit -m change',
       ]) {
-        assert.equal(resolveBashRule(bash, command), 'deny', `${role} must deny ${command}`);
+        assert.equal(resolveRule(rules, 'shell', command), 'deny', `${role} must deny ${command}`);
       }
     }
   });
 
-  test('sidekick and design share an identical bash guard map', () => {
-    const rulesOf = (role) => Object.entries(applyConductor({}).agent[role].permission.bash);
-    assert.deepEqual(rulesOf('design'), rulesOf('sidekick'));
+  test('sidekick and design share identical shell guard rules', () => {
+    const shellOf = (role) => resolveAgentDefinitions({}).defs[role].permissions.filter((r) => r.action === 'shell');
+    assert.deepEqual(shellOf('design'), shellOf('sidekick'));
   });
 
   test('build asks on commit/push and denies dangerous push variants after the push ask', () => {
-    const bash = applyConductor({}).agent.build.permission.bash;
-    assert.equal(bash['git add*'], 'allow');
-    assert.equal(bash['git commit*'], 'ask');
-    assert.equal(bash['git push*'], 'ask');
+    const rules = resolveAgentDefinitions({}).defs.build.permissions;
+    assert.equal(resolveRule(rules, 'shell', 'git add .'), 'allow');
+    assert.equal(resolveRule(rules, 'shell', 'git commit -m x'), 'ask');
+    assert.equal(resolveRule(rules, 'shell', 'git push origin feature'), 'ask');
     for (const command of [
-      'git push origin feature',
       'git push origin feature--force',
       'git push origin feature--mirror',
       'git push origin feature--delete',
       'git push origin feature--prune',
     ]) {
-      assert.equal(resolveBashRule(bash, command), 'ask', `an ordinary push must ask: ${command}`);
+      assert.equal(resolveRule(rules, 'shell', command), 'ask', `an ordinary push must ask: ${command}`);
     }
     for (const command of [
       'git push --force origin main',
@@ -323,39 +380,34 @@ describe('applyConductor injection', () => {
       'git push origin :retired',
       'git push origin +main',
     ]) {
-      assert.equal(resolveBashRule(bash, command), 'deny', `dangerous push must be denied: ${command}`);
+      assert.equal(resolveRule(rules, 'shell', command), 'deny', `dangerous push must be denied: ${command}`);
     }
     // last-match-wins: every git push deny must sit after the broad "git push*" ask.
-    const keys = Object.keys(bash);
-    const pushAsk = keys.indexOf('git push*');
-    const pushDenies = keys.filter((k) => bash[k] === 'deny' && k.startsWith('git push'));
-    assert.ok(pushDenies.length >= 4, 'build bash must keep the dangerous-push denylist');
+    const shell = rules.filter((r) => r.action === 'shell');
+    const pushAsk = shell.findIndex((r) => r.resource === 'git push*');
+    const pushDenies = shell.filter((r) => r.effect === 'deny' && r.resource.startsWith('git push'));
+    assert.ok(pushDenies.length >= 4, 'build shell must keep the dangerous-push denylist');
     for (const deny of pushDenies) {
-      assert.ok(keys.indexOf(deny) > pushAsk, `${deny} must appear after "git push*" (last-match-wins)`);
+      assert.ok(shell.indexOf(deny) > pushAsk, `${deny.resource} must appear after "git push*" (last-match-wins)`);
     }
   });
 
   test('design is fenced to the workspace and can load the skill its prompt requires', () => {
-    const design = applyConductor({}).agent.design;
-    assert.equal(design.permission.external_directory, 'deny');
-    assert.equal(design.permission.skill, 'allow');
+    const { defs } = resolveAgentDefinitions({});
+    assert.equal(resolveRule(defs.design.permissions, 'external_directory', '/elsewhere/x'), 'deny');
+    assert.equal(resolveRule(defs.design.permissions, 'skill', 'anything'), 'allow');
     for (const role of ROLES.filter((r) => r !== 'design')) {
-      assert.ok(!('skill' in applyConductor({}).agent[role].permission), `${role} must not grant the skill permission`);
+      assert.ok(
+        !defs[role].permissions.some((r) => r.action === 'skill'),
+        `${role} must not grant the skill permission`
+      );
     }
   });
 
-  test('vision bash stays fully denied in the injected config', () => {
-    assert.equal(applyConductor({}).agent.vision.permission.bash, 'deny');
-  });
-
-  test('build bash key order is preserved exactly', () => {
-    assert.deepEqual(Object.keys(applyConductor({}).agent.build.permission.bash), BUILD_BASH_KEYS);
-  });
-
   test('read-only verification allowlists still deny file-writing argument forms', () => {
-    const config = applyConductor({});
+    const { defs } = resolveAgentDefinitions({});
     for (const role of ['build', 'plan', 'reviewer']) {
-      const bash = config.agent[role].permission.bash;
+      const rules = defs[role].permissions;
       for (const command of [
         'git diff --output=hijack.txt',
         'git diff HEAD~1 --output=hijack.txt',
@@ -368,122 +420,125 @@ describe('applyConductor injection', () => {
         'npx vitest run --update',
         'npx vitest run src/app.test.ts -u',
       ]) {
-        assert.equal(resolveBashRule(bash, command), 'deny', `${role} must deny the file-writing form: ${command}`);
+        assert.equal(resolveRule(rules, 'shell', command), 'deny', `${role} must deny the file-writing form: ${command}`);
       }
       for (const command of ['git diff', 'git log --oneline', 'npm run lint', 'npm test', 'npx vitest run']) {
-        assert.equal(resolveBashRule(bash, command), 'allow', `${role} must still allow the read-only form: ${command}`);
+        assert.equal(resolveRule(rules, 'shell', command), 'allow', `${role} must still allow the read-only form: ${command}`);
       }
     }
   });
 
   test('conductor_configure and conductor_status are allowed only for build and plan', () => {
-    const config = applyConductor({});
+    const { defs } = resolveAgentDefinitions({});
     for (const role of ['build', 'plan']) {
-      assert.equal(config.agent[role].permission.conductor_configure, 'allow', `${role} must allow conductor_configure`);
-      assert.equal(config.agent[role].permission.conductor_status, 'allow', `${role} must allow conductor_status`);
+      assert.equal(resolveRule(defs[role].permissions, 'conductor_configure', '*'), 'allow', `${role} must allow conductor_configure`);
+      assert.equal(resolveRule(defs[role].permissions, 'conductor_status', '*'), 'allow', `${role} must allow conductor_status`);
     }
     for (const role of ['sidekick', 'research', 'design', 'reviewer', 'vision']) {
-      assert.equal(config.agent[role].permission.conductor_configure, 'deny', `${role} must deny conductor_configure`);
-      assert.equal(config.agent[role].permission.conductor_status, 'deny', `${role} must deny conductor_status`);
+      assert.equal(resolveRule(defs[role].permissions, 'conductor_configure', '*'), 'deny', `${role} must deny conductor_configure`);
+      assert.equal(resolveRule(defs[role].permissions, 'conductor_status', '*'), 'deny', `${role} must deny conductor_status`);
     }
   });
 
-  test('the conductor tool permissions are tool-level, unshadowed, and placed before bash', () => {
-    const config = applyConductor({});
+  test('the conductor tool rules are tool-level: never nested inside shell/subagent groups', () => {
+    const { defs } = resolveAgentDefinitions({});
     for (const role of ROLES) {
-      const permission = config.agent[role].permission;
-      const keys = Object.keys(permission);
-      // Tool-level keys: never inside the bash or task maps.
-      for (const nested of ['bash', 'task']) {
-        const value = permission[nested];
-        if (value && typeof value === 'object') {
-          assert.ok(!('conductor_configure' in value), `${role} conductor_configure must not live in ${nested}`);
-          assert.ok(!('conductor_status' in value), `${role} conductor_status must not live in ${nested}`);
-        }
-      }
-      // No top-level wildcard exists to shadow them, and they precede the bash
-      // map so a later generic rule cannot win.
-      assert.ok(!keys.includes('*'), `${role} permission must not add a top-level wildcard`);
-      assert.ok(
-        keys.indexOf('conductor_configure') < keys.indexOf('conductor_status'),
-        `${role} conductor_configure must precede conductor_status`
-      );
-      if (permission.bash && typeof permission.bash === 'object') {
+      for (const rule of defs[role].permissions) {
         assert.ok(
-          keys.indexOf('conductor_configure') < keys.indexOf('bash'),
-          `${role} conductor tool permissions must be placed before the bash map`
+          rule.action === 'shell' || rule.action === 'subagent' || !['bash', 'task'].includes(rule.action),
+          `${role} must not nest conductor rules`
         );
       }
+      // No blanket wildcard exists to shadow them.
+      assert.ok(
+        !defs[role].permissions.some((r) => r.action === '*' && r.resource === '*'),
+        `${role} permissions must not add a *-on-* wildcard`
+      );
     }
   });
 
-  test('repeated application does not mutate the shared AGENTS definitions', () => {
-    const first = applyConductor({});
-    const second = applyConductor({});
+  test('build shell rule order is preserved exactly', () => {
+    const shell = resolveAgentDefinitions({}).defs.build.permissions.filter((r) => r.action === 'shell');
+    assert.deepEqual(shell.map((r) => r.resource), BUILD_SHELL_RESOURCES);
+  });
+
+  test('repeated resolution does not mutate the shared AGENTS definitions', () => {
+    const first = resolveAgentDefinitions({});
+    const second = resolveAgentDefinitions({});
     for (const role of ROLES) {
       assert.equal(
-        Object.keys(second.agent[role].permission).length,
-        Object.keys(first.agent[role].permission).length,
-        `${role} permission must not accumulate keys across calls`
+        second.defs[role].permissions.length,
+        first.defs[role].permissions.length,
+        `${role} permissions must not accumulate rules across calls`
       );
       assert.ok(!('conductor_configure' in mods.AGENTS[role].permission));
+      assert.ok(!('system' in mods.AGENTS[role]) || typeof mods.AGENTS[role].system === 'string');
     }
+    assert.ok(!('permissions' in mods.AGENTS.build), 'raw AGENTS must keep V1 permission maps, not V2 arrays');
+  });
+
+  test('no legacy top-level config keys leak into the resolution', () => {
+    const out = resolveAgentDefinitions({});
+    assert.ok(!('subagent_depth' in out), 'V2 has no top-level subagent_depth: use experimental.subagent_depth');
+    assert.ok(!('small_model' in out), 'small_model is folded into the title agent model');
+    assert.ok(!('command' in out), 'commands register through ctx.command, not the resolution');
   });
 });
 
 describe('profile and model resolution', () => {
   test('each profile resolves its models onto the correct agents', () => {
     for (const [name, profile] of Object.entries(mods.PROFILES)) {
-      const config = applyConductor({}, { profile: name });
+      const { defs, exploreModel, defaultModel, titleModel } = resolveAgentDefinitions({ profile: name });
       for (const [role, model] of Object.entries(profile.agents)) {
         if (role === 'explore') {
-          assert.deepEqual(config.agent.explore, { model }, `${name}: explore must get only { model }`);
+          assert.deepEqual(exploreModel, mods.parseModelRef(model), `${name}: explore model mismatch`);
+          assert.ok(!('explore' in defs), 'explore stays model-only, never a full definition');
         } else {
-          assert.equal(config.agent[role].model, model, `${name}/${role} model mismatch`);
+          assert.deepEqual(defs[role].model, mods.parseModelRef(model), `${name}/${role} model mismatch`);
         }
       }
-      assert.equal(config.model, profile.model, `${name}: config.model must be the profile build model`);
-      assert.equal(config.small_model, profile.small_model, `${name}: config.small_model mismatch`);
+      assert.deepEqual(defaultModel, mods.parseModelRef(profile.model), `${name}: default model must be the profile build model`);
+      assert.deepEqual(titleModel, mods.parseModelRef(profile.small_model), `${name}: title model mismatch`);
     }
   });
 
   test('roles the profile does not assign get no model key', () => {
-    const config = applyConductor({}, { profile: 'chatgpt' });
+    const { defs } = resolveAgentDefinitions({ profile: 'chatgpt' });
     for (const role of ['plan', 'design', 'vision']) {
-      assert.ok(!('model' in config.agent[role]), `chatgpt must not assign ${role}`);
+      assert.ok(!('model' in defs[role]), `chatgpt must not assign ${role}`);
     }
   });
 
   test('options.models overrides the profile per role', () => {
-    const config = applyConductor({}, {
+    const out = resolveAgentDefinitions({
       profile: 'opencode-go',
       models: { sidekick: 'custom/fast', explore: 'custom/explore' },
     });
-    assert.equal(config.agent.sidekick.model, 'custom/fast');
-    assert.deepEqual(config.agent.explore, { model: 'custom/explore' });
+    assert.deepEqual(out.defs.sidekick.model, { providerID: 'custom', id: 'fast' });
+    assert.deepEqual(out.exploreModel, { providerID: 'custom', id: 'explore' });
     // Roles without an override still come from the profile.
-    assert.equal(config.agent.build.model, 'opencode-go/kimi-k3');
-    assert.equal(config.agent.design.model, 'opencode-go/qwen3.8-max');
-    assert.equal(config.agent.reviewer.model, 'opencode-go/glm-5.3-flash');
-    assert.equal(config.model, 'opencode-go/kimi-k3');
-    assert.equal(config.small_model, 'opencode-go/deepseek-v4-flash');
+    assert.deepEqual(out.defs.build.model, { providerID: 'opencode-go', id: 'kimi-k3' });
+    assert.deepEqual(out.defs.design.model, { providerID: 'opencode-go', id: 'qwen3.8-max' });
+    assert.deepEqual(out.defs.reviewer.model, { providerID: 'opencode-go', id: 'glm-5.3-flash' });
+    assert.deepEqual(out.defaultModel, { providerID: 'opencode-go', id: 'kimi-k3' });
+    assert.deepEqual(out.titleModel, { providerID: 'opencode-go', id: 'deepseek-v4-flash' });
   });
 
   test('options.models work without a profile', () => {
-    const config = applyConductor({}, { models: { build: 'custom/build', sidekick: 'custom/fast', explore: 'custom/explore' } });
-    assert.equal(config.agent.build.model, 'custom/build');
-    assert.equal(config.agent.sidekick.model, 'custom/fast');
-    assert.deepEqual(config.agent.explore, { model: 'custom/explore' });
-    assert.equal(config.model, 'custom/build');
-    assert.ok(!('small_model' in config), 'small_model must only come from a profile');
+    const out = resolveAgentDefinitions({ models: { build: 'custom/build', sidekick: 'custom/fast', explore: 'custom/explore' } });
+    assert.deepEqual(out.defs.build.model, { providerID: 'custom', id: 'build' });
+    assert.deepEqual(out.defs.sidekick.model, { providerID: 'custom', id: 'fast' });
+    assert.deepEqual(out.exploreModel, { providerID: 'custom', id: 'explore' });
+    assert.deepEqual(out.defaultModel, { providerID: 'custom', id: 'build' });
+    assert.ok(!('titleModel' in out), 'title model must only come from a profile');
     for (const role of ['plan', 'research', 'design', 'reviewer', 'vision']) {
-      assert.ok(!('model' in config.agent[role]), `${role} must not get a model from unrelated options`);
+      assert.ok(!('model' in out.defs[role]), `${role} must not get a model from unrelated options`);
     }
   });
 
   test('unknown profile throws and names the available profiles', () => {
     assert.throws(
-      () => applyConductor({}, { profile: 'nope' }),
+      () => resolveAgentDefinitions({ profile: 'nope' }),
       (err) => {
         assert.match(err.message, /Unknown conductor profile "nope"/);
         for (const name of Object.keys(mods.PROFILES)) {
@@ -494,36 +549,163 @@ describe('profile and model resolution', () => {
     );
   });
 
-  test('subagent_depth floors at 2', () => {
-    assert.equal(applyConductor({}).subagent_depth, 2);
-    assert.equal(applyConductor({ subagent_depth: 0 }).subagent_depth, 2);
-    assert.equal(applyConductor({ subagent_depth: 1 }).subagent_depth, 2);
-    assert.equal(applyConductor({ subagent_depth: 3 }).subagent_depth, 3);
-  });
-
   test('with no profile and no models, agents get no model key and explore stays untouched', () => {
-    const config = applyConductor({});
+    const out = resolveAgentDefinitions({});
     for (const role of ROLES) {
-      assert.ok(!('model' in config.agent[role]), `${role} must not get a model key`);
+      assert.ok(!('model' in out.defs[role]), `${role} must not get a model key`);
     }
-    assert.ok(!('explore' in config.agent), 'explore must not be injected without a resolved model');
-    assert.ok(!('model' in config), 'config.model must not be set without a build model');
-    assert.ok(!('small_model' in config), 'config.small_model must not be set without a profile');
+    assert.ok(!('exploreModel' in out), 'explore must not resolve without a model');
+    assert.ok(!('defaultModel' in out), 'no default model without a build model');
+    assert.ok(!('titleModel' in out), 'no title model without a profile');
   });
 
-  test('explore gets only { model } and only when a model resolves for it', () => {
-    const withExplore = applyConductor({}, { models: { explore: 'x/explore' } });
-    assert.deepEqual(withExplore.agent.explore, { model: 'x/explore' });
-    const withoutExplore = applyConductor({}, { models: { build: 'x/build' } });
-    assert.ok(!('explore' in withoutExplore.agent));
+  test('explore resolves only when a model resolves for it', () => {
+    const withExplore = resolveAgentDefinitions({ models: { explore: 'x/explore' } });
+    assert.deepEqual(withExplore.exploreModel, { providerID: 'x', id: 'explore' });
+    const withoutExplore = resolveAgentDefinitions({ models: { build: 'x/build' } });
+    assert.ok(!('exploreModel' in withoutExplore));
+  });
+});
+
+describe('registerConductor V2 wiring', () => {
+  function stubEditor(initial = {}) {
+    const store = new Map(Object.entries(initial));
+    return {
+      store,
+      list: () => [...store.values()],
+      get: (id) => store.get(id),
+      default: () => {},
+      update: (id, fn) => {
+        const current = store.get(id) ?? { id };
+        fn(current);
+        store.set(id, current);
+      },
+      remove: (id) => { store.delete(id); },
+    };
+  }
+
+  function fakeCtx(options = {}) {
+    const seen = { agentCb: null, modelCb: null, commands: [], tools: [], hooks: {}, defaultModel: null };
+    const ctx = {
+      options,
+      location: { directory: '/test/location', project: { id: 'p1', directory: '/test/location', canonical: '/test/location' } },
+      agent: {
+        transform: async (cb) => { seen.agentCb = cb; },
+        reload: async () => {},
+      },
+      model: {
+        transform: async (cb) => {
+          seen.modelCb = cb;
+          cb({ default: { set: (providerID, id) => { seen.defaultModel = { providerID, id }; } } });
+        },
+        reload: async () => {},
+      },
+      command: {
+        transform: async (cb) => { cb({ add: (def) => seen.commands.push(def) }); },
+        reload: async () => {},
+      },
+      tool: {
+        transform: async (cb) => { cb({ add: (def) => seen.tools.push(def) }); },
+        reload: async () => {},
+      },
+      session: {
+        hook: async (name, cb) => { seen.hooks[name] = cb; },
+        get: async () => ({ data: { location: { directory: '/test/session' } } }),
+        prompt: async () => {},
+      },
+      event: {
+        subscribe: () => (async function* () {})(),
+      },
+    };
+    return { ctx, seen };
+  }
+
+  test('upserts all seven roles and preserves existing explore/title entries', async () => {
+    const { ctx, seen } = fakeCtx({ profile: 'opencode-go' });
+    await mods.registerConductor(ctx, ctx.options);
+    assert.equal(typeof seen.agentCb, 'function', 'must register an agent transform');
+
+    const editor = stubEditor({
+      build: { id: 'build', description: 'old', permissions: [] },
+      explore: { id: 'explore', description: 'built-in', permissions: [{ action: 'x', resource: '*', effect: 'allow' }] },
+      title: { id: 'title', permissions: [] },
+    });
+    seen.agentCb(editor);
+    for (const role of ROLES) {
+      const agent = editor.store.get(role);
+      assert.ok(agent, `${role} must be registered`);
+      assert.equal(typeof agent.system, 'string', `${role} must carry its system prompt`);
+      assert.ok(Array.isArray(agent.permissions), `${role} must carry V2 permissions`);
+    }
+    assert.equal(editor.store.get('sidekick').model.providerID, 'opencode-go');
+    // explore keeps its built-in definition fields, gaining only the model.
+    assert.equal(editor.store.get('explore').description, 'built-in');
+    assert.equal(editor.store.get('explore').model.id, 'deepseek-v4-flash');
+    // title gains the profile small_model.
+    assert.equal(editor.store.get('title').model.id, 'deepseek-v4-flash');
+    // default session model follows the build model.
+    assert.deepEqual(seen.defaultModel, { providerID: 'opencode-go', id: 'kimi-k3' });
   });
 
-  test('config.model and small_model come only from resolved profile data', () => {
-    const fromModels = applyConductor({}, { models: { build: 'custom/build' } });
-    assert.equal(fromModels.model, 'custom/build');
-    assert.ok(!('small_model' in fromModels));
-    const fromProfile = applyConductor({}, { profile: 'chatgpt' });
-    assert.equal(fromProfile.model, 'openai/gpt-5.6-sol');
-    assert.equal(fromProfile.small_model, 'openai/gpt-5.6-luna');
+  test('registers the /conductor command, the conductor tools, and the context guard', async () => {
+    const { ctx, seen } = fakeCtx({});
+    await mods.registerConductor(ctx, ctx.options);
+    assert.equal(seen.commands.length, 1);
+    assert.equal(seen.commands[0].name, 'conductor');
+    assert.equal(seen.commands[0].description, mods.COMMANDS.conductor.description);
+    assert.equal(typeof seen.commands[0].execute, 'function');
+    assert.deepEqual(seen.tools.map((t) => t.name).sort(), ['conductor_configure', 'conductor_status']);
+    assert.equal(typeof seen.hooks.context, 'function', 'must register the context guard hook');
+  });
+
+  test('the /conductor command substitutes the invocation text for $ARGUMENTS', async () => {
+    const { ctx, seen } = fakeCtx({});
+    await mods.registerConductor(ctx, ctx.options);
+    const prompts = [];
+    ctx.session.prompt = async (input) => { prompts.push(input); };
+    await seen.commands[0].execute({ sessionID: 'ses_1', prompt: { text: 'profile chatgpt' }, delivery: 'steer' });
+    assert.equal(prompts.length, 1);
+    assert.equal(prompts[0].sessionID, 'ses_1');
+    assert.ok(prompts[0].text.includes('profile chatgpt'), 'invocation text must replace $ARGUMENTS');
+    assert.ok(!prompts[0].text.includes('$ARGUMENTS'), 'no $ARGUMENTS may survive');
+  });
+
+  test('the context guard strips mutation/search tools only for build and plan', async () => {
+    const { ctx, seen } = fakeCtx({});
+    await mods.registerConductor(ctx, ctx.options);
+    const tools = () => ({ edit: {}, write: {}, patch: {}, grep: {}, glob: {}, read: {}, subagent: {} });
+    const buildEvent = { agent: 'build', tools: tools() };
+    seen.hooks.context(buildEvent);
+    assert.deepEqual(Object.keys(buildEvent.tools).sort(), ['read', 'subagent']);
+    const planEvent = { agent: 'plan', tools: tools() };
+    seen.hooks.context(planEvent);
+    assert.deepEqual(Object.keys(planEvent.tools).sort(), ['read', 'subagent']);
+    const sidekickEvent = { agent: 'sidekick', tools: tools() };
+    seen.hooks.context(sidekickEvent);
+    assert.equal(Object.keys(sidekickEvent.tools).length, 7, 'executors keep every tool');
+  });
+
+  test('unknown profile rejects registration with the available names', async () => {
+    const { ctx } = fakeCtx({ profile: 'nope' });
+    await assert.rejects(
+      mods.registerConductor(ctx, ctx.options),
+      (err) => {
+        assert.match(err.message, /Unknown conductor profile "nope"/);
+        return true;
+      }
+    );
+  });
+});
+
+
+describe("title agent model", () => {
+  test("the title model follows the profile small_model", () => {
+    const out = mods.resolveAgentDefinitions({ profile: "chatgpt" });
+    assert.deepEqual(out.titleModel, { providerID: "openai", id: "gpt-5.6-luna" });
+  });
+
+  test("there is no models.title override", () => {
+    const out = mods.resolveAgentDefinitions({ profile: "opencode-go", models: { title: "custom/titles" } });
+    assert.deepEqual(out.titleModel, { providerID: "opencode-go", id: "deepseek-v4-flash" });
   });
 });

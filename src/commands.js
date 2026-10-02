@@ -18,8 +18,9 @@ Then follow exactly ONE of these branches:
 == BRANCH A - ARGUMENTS PRESENT ==
 When $ARGUMENTS is non-empty, apply the requested changes with the conductor_configure tool and do NOT run the interview:
 - "profile <name>" (for example "profile opencode-go" or "use my GitHub Copilot subscription") sets the subscription profile: pass { profile: "<name>" } to conductor_configure.
+- "depth=N" (for example "depth=2") sets the subagent delegation depth: pass { depth: N } to conductor_configure (integer 2 or higher; "depth=none" removes it by passing { depth: null }).
 - "audit=true"/"audit=false" and "claude=true"/"claude=false" set the feature flags: pass { audit: true|false } and/or { claude: true|false } to conductor_configure.
-- Any remaining tokens in role=model form (for example "sidekick=provider/model-id explore=provider/model-id") are per-role model overrides: pass { models: { role: "provider/model-id", ... } } to conductor_configure. Use exactly what the user typed - never invent or autocomplete model ids.
+- Any remaining tokens in role=model form (for example "sidekick=provider/model-id explore=provider/model-id") are per-role model overrides for the team roles (title is not overridable: it follows top-level small_model): pass { models: { role: "provider/model-id", ... } } to conductor_configure. Use exactly what the user typed - never invent or autocomplete model ids.
 Combine everything requested into ONE conductor_configure call when it fits (profile, models, and flags can be passed together).
 After conductor_configure returns, report its change summary to the user and remind them: "Restart opencode for changes to take effect."
 
@@ -33,7 +34,7 @@ When $ARGUMENTS is empty and the conductor_status "Setup state:" line says "unco
 2. Ask which subscription/profile they use, presenting the "Available profiles:" list from the conductor_status output (one line per profile: "name: role=model, ..., small_model=..."). Do NOT hardcode profile names or models in your questions - the status report is the source. Include the option "none of these - I'll pick models per role".
 3. If a profile was chosen: show its role -> model assignments from the status output and ask whether to keep those assignments or override any role. For each role the user wants overridden, ask for the model as provider/model-id. Never invent or autocomplete model ids - use exactly what the user types (conductor_configure validates the format), and if their input lacks the provider/ prefix, ask them to give it in provider/model form.
    If "none of these" was chosen: ask which models to use, at minimum for build (the main planning agent) and sidekick (the cheaper executor); the other roles (plan, explore, research, design, reviewer, vision) are optional.
-4. Ask one compact optional question: enable audit logging (off by default) and/or the Claude bridge (off by default, requires the Claude Code CLI)?
+4. Ask one compact optional question: enable audit logging (off by default) and/or the Claude bridge (off by default, requires the Claude Code CLI), plus subagent depth (2 unless already set)?
 5. Call conductor_configure with the collected values (the chosen profile and/or the role -> model map, plus audit/claude booleans as answered). Report exactly what changed, then remind: "Restart opencode for changes to take effect."`,
   },
 };

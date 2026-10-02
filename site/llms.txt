@@ -21,19 +21,19 @@ Fusion Conductor is an *opencode plugin* (not an app). Install it by adding one 
 
 ## Quick install
 
-Recommended: `opencode plugin github:JoshuaKimsey/opencode-fusion-conductor -g` (drop `-g` for a project-local `.opencode/opencode.json`). It writes the config entry itself and fails with a real error if the install fails.
+Recommended: `opencode plugin add opencode-fusion-conductor`. It installs the package and writes the config entry into the global config itself, failing with a real error if the install fails.
 
 Manual alternative: add one line to your opencode config (`~/.config/opencode/opencode.json`, or a project-level `opencode.json`):
 
 ```json
 {
-  "plugin": [["opencode-fusion-conductor@1.0.1", { "profile": "opencode-go" }]]
+  "plugins": [{ "package": "opencode-fusion-conductor@2.0.0", "options": { "profile": "opencode-go" } }]
 }
 ```
 
-Then fully quit and restart opencode. opencode auto-installs npm plugins via Bun at startup, so there is no skill and no installer. The plugin injects the agent team and the `/conductor` command on the next launch; a bare `/conductor` on an unconfigured install runs the first-run setup interview in chat. Uninstall by removing the line and restarting.
+Then fully quit and restart opencode (or `opencode service restart`). There is no skill and no installer. The plugin injects the agent team and the `/conductor` command on the next launch; a bare `/conductor` on an unconfigured install runs the first-run setup interview in chat. Uninstall by removing the line and restarting.
 
-Silent-failure note: on opencode 1.18.x, a plugin install that fails at startup exits normally and logs nothing (even with `--log-level DEBUG --print-logs`) - opencode just runs with stock agents. Fingerprint: an empty `~/.cache/opencode/packages/<spec>/` (no `node_modules`). Ensure git is on PATH and github.com is reachable, delete the empty dir, retry; the `opencode plugin ...` CLI does not swallow this error.
+Silent-failure note: a plugin install that fails leaves opencode running with stock agents. Check `opencode plugin list` for the `opencode-fusion-conductor` id, inspect `~/.local/share/opencode/log/opencode.log`, and retry via the `opencode plugin add ...` CLI, which surfaces install errors directly.
 
 Coming from opencode-fusion? Say `undo fusion` with the old fusion-setup skill first to remove the file-based install, then add the plugin line. `/conductor` warns if leftover fusion files are detected.
 
@@ -46,9 +46,9 @@ Coming from opencode-fusion? Say `undo fusion` with the old fusion-setup skill f
 ## Core ideas for agents helping users
 
 1. Main (`build`) plans, delegates, and reviews — it must not edit files. `plan` is the plan-mode primary; `sidekick` executes edits and commands.
-2. Sidekick executes precise specs; explore/research/design/reviewer/vision are the other injected roles. `explore` is opencode's built-in read-only agent, model-only. `subagent_depth` is floored to 2.
-3. OpenCode enforces this with permission maps injected by the plugin (edit deny + task graph). Denied tools are removed from the model's tool schema, so "won't delegate" means visible inaction, never a silent bypass.
-4. Config loads at startup — restart after changing plugin options. On opencode 1.18.x the agent registry is materialized at startup, so model changes require a restart (a platform limitation).
+2. Sidekick executes precise specs; explore/research/design/reviewer/vision are the other injected roles. `explore` is opencode's built-in read-only agent, model-only. Set `experimental.subagent_depth` to at least 2 yourself if you want the sidekick to keep delegating read-only lookups (V2 exposes no such knob to plugins).
+3. OpenCode enforces this with ordered `permissions` arrays registered by the plugin (edit deny + subagent graph), plus a session hook that strips edit/write/patch/grep/glob from build/plan model requests - so "won't delegate" means visible inaction, never a silent bypass.
+4. Config loads at startup — restart after changing plugin options. The agent registry is materialized at startup, so model changes require a restart (a platform limitation).
 5. Cross-vendor review is emergent: pick main and sidekick from different model families.
 6. Only the permission layer is enforced; prompts are advisory. Ignoring them costs quality or tokens, never an unauthorized edit.
 7. If the sidekick misses a spec twice, the main agent dictates the exact patch verbatim (file, line range, code) for the sidekick to apply — the retry loop cannot deadlock. If the dictated patch fails verification, the plan is wrong and main revises it.
@@ -56,8 +56,8 @@ Coming from opencode-fusion? Say `undo fusion` with the old fusion-setup skill f
 9. The `/conductor` slash command reports or edits the plugin's own options: `/conductor` with no args runs `conductor_status` (read-only report including leftover fusion-install hazards); with args it runs `conductor_configure` (role=model pairs, `profile <name>`, or `audit=true`/`claude=true` flags), writing a backup at `opencode.json.conductor-backup` and telling you to restart.
 10. Bundled subscription profiles (`opencode-go`, `opencode-zen`, `opencode-zen-free`, `chatgpt`, `github-copilot`) are applied via the `profile` option; the `models` option overrides per role. Provider auth stays out-of-band via `opencode auth login` — profiles never contain keys.
 11. The `audit` option (boolean, off by default) enables a hook that logs the delegation tree and per-agent token usage. The `claude` option (boolean, off by default) enables the Claude Code bridge tools `conductor_claude_status`/`conductor_claude_review`, which require the Claude Pro/Max CLI installed and authenticated.
-12. Targets opencode 1.18.x. OpenCode 2 (beta) is not supported: its plugin API differs and permission enforcement is call-time rather than schema-removal. A v2 port is planned. Known upstream flake: anomalyco/opencode#30955 (rare config-hook/agent-registry race on first delegation; retry resolves it).
+12. Targets OpenCode V2 (2.x) since the 2.0.0 port: agents register through `ctx.agent.transform` upserts, permissions are V2 ordered arrays (`bash` -> `shell`, `task` -> `subagent`), and the `/conductor` tools read and write both the V1 `plugin` tuple form and the native V2 `plugins` object form.
 13. First-run setup: a bare `/conductor` on an unconfigured install (no profile, no model overrides) runs a setup interview - profile choice from the status report's available-profiles list, per-role model overrides, and optional `audit`/`claude` flags - then applies the answers via `conductor_configure` and tells you to restart. Passing arguments directly applies them and skips the interview.
-14. Plugin updates: the CLI has no update/remove subcommands - only `opencode plugin <module> [-g] [-f]`. Version-pinned update = `opencode plugin opencode-fusion-conductor@<newer-version> -g -f`; the `-f`/`--force` flag is required (without it the CLI prints "Already configured in ..." and keeps the old entry while caching the new version; with it the entry is replaced in place, never duplicated). Restart after; the old `~/.cache/opencode/packages/<pkg>@<old-ver>/` dir lingers harmlessly - `rm -rf` it for hygiene.
-15. Unpinned entries freeze: opencode never re-resolves `latest` after first install because the `<pkg>@latest/` cache dir short-circuits resolution (anomalyco/opencode#16608). Update = `rm -rf ~/.cache/opencode/packages/<pkg>@latest` then restart (reinstalls latest), or migrate to a pin with the `-f` command.
-16. Removal: no CLI support - delete the entry from the `plugin` array in opencode.json, then optionally `rm -rf ~/.cache/opencode/packages/<pkg>*`.
+14. Plugin updates: `opencode plugin check`, then `opencode plugin update opencode-fusion-conductor`. Restart after.
+15. Removal: `opencode plugin remove opencode-fusion-conductor`, then restart.
+16. Model changes require a restart: the agent registry is materialized at startup, so injected agents and their model assignments only take effect on the next launch.

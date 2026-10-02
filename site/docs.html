@@ -284,10 +284,10 @@
                 <span class="copy-btn-text">Copy</span>
               </button>
             </div>
-            <pre class="command-pre"><code id="docs-cmd-cli">opencode plugin github:JoshuaKimsey/opencode-fusion-conductor -g</code></pre>
+            <pre class="command-pre"><code id="docs-cmd-cli">opencode plugin add opencode-fusion-conductor</code></pre>
           </div>
 
-          <p>The CLI command writes the plugin entry into your config itself and fails with a real error if the install fails. <code>-g</code> targets the global config; drop it for a project-local <code>.opencode/opencode.json</code>. To pin a specific revision, append a commit SHA to the spec (<code>github:JoshuaKimsey/opencode-fusion-conductor#&lt;commit-sha&gt;</code>) - do not pin by this repo's <code>v1.x</code> tags, which are inherited from upstream opencode-fusion and point at old releases.</p>
+          <p>The CLI command installs the package and writes the plugin entry into your global config itself, failing with a real error if the install fails. To try an unreleased revision straight from git, use <code>opencode plugin add github:JoshuaKimsey/opencode-fusion-conductor</code> - do not pin by this repo's <code>v1.x</code> tags, which are inherited from upstream opencode-fusion and point at old releases.</p>
 
           <p>Or edit the config by hand:</p>
 
@@ -299,7 +299,7 @@
                 <span class="copy-btn-text">Copy</span>
               </button>
             </div>
-            <pre class="command-pre"><code id="docs-cmd-opencode">{ "plugin": [["opencode-fusion-conductor@1.0.1", { "profile": "opencode-go" }]] }</code></pre>
+            <pre class="command-pre"><code id="docs-cmd-opencode">{ "plugins": [{ "package": "opencode-fusion-conductor@2.0.0", "options": { "profile": "opencode-go" } }] }</code></pre>
           </div>
 
           <p class="docs-note">Works on Windows, macOS, and Linux. No skill, no installer; a bare <code>/conductor</code> runs the first-run setup interview in chat. Uninstall by removing the line and restarting.</p>
@@ -387,12 +387,12 @@
           <h2>Customize</h2>
           <p>All plugin options live in the plugin entry of <code>~/.config/opencode/opencode.json</code>: <code>profile</code> (the subscription profile), <code>models</code> (per-role overrides as <code>role -> "provider/model-id"</code> for <code>build</code>, <code>plan</code>, <code>sidekick</code>, <code>explore</code>, <code>research</code>, <code>design</code>, <code>reviewer</code>, <code>vision</code>), <code>audit</code> (boolean, off by default), and <code>claude</code> (boolean, off by default — enables the Claude Code bridge tools <code>conductor_claude_status</code>/<code>conductor_claude_review</code>, which require the Claude Pro/Max CLI installed and authenticated).</p>
           <p>Edit the entry, then restart OpenCode — the agent registry is materialized at startup, so model changes need a full restart. Or run <code>/conductor</code> with arguments to have <code>conductor_configure</code> edit the options for you atomically, and restart when it tells you to. Keep the sidekick cheaper and faster than main when you can.</p>
-          <p>The README covers the rest: <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor#configuration" target="_blank" rel="noopener noreferrer">configuration options and examples</a>, <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor#enforced-vs-advised" target="_blank" rel="noopener noreferrer">adjusting the main agent’s bash allowlist</a> (keep <code>"*": "deny"</code> first; run one command per call — a chained line is matched segment by segment and one denied segment denies the whole call), and <a href="#migration">migrating from opencode-fusion</a> (run the old <code>undo fusion</code> to remove the file-based install first).</p>
+          <p>The README covers the rest: <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor#configuration" target="_blank" rel="noopener noreferrer">configuration options and examples</a>, <a href="https://github.com/JoshuaKimsey/opencode-fusion-conductor#enforced-vs-advised" target="_blank" rel="noopener noreferrer">adjusting the main agent’s shell allowlist</a> (keep <code>"*": "deny"</code> first; run one command per call — a chained line is matched segment by segment and one denied segment denies the whole call), and <a href="#migration">migrating from opencode-fusion</a> (run the old <code>undo fusion</code> to remove the file-based install first).</p>
         </section>
 
         <section id="updating" class="docs-section">
           <h2>Updating</h2>
-          <p>The plugin CLI has no update or remove subcommands - the only form is <code>opencode plugin &lt;module&gt; [-g] [-f]</code>. To update a version-pinned install, rerun the pinned command with <code>-f</code>:</p>
+          <p>Check for updates and install them with the plugin CLI, then restart opencode:</p>
 
           <div class="command">
             <div class="command-bar">
@@ -402,25 +402,10 @@
                 <span class="copy-btn-text">Copy</span>
               </button>
             </div>
-            <pre class="command-pre"><code id="docs-cmd-update">opencode plugin opencode-fusion-conductor@1.0.2 -g -f</code></pre>
+            <pre class="command-pre"><code id="docs-cmd-update">opencode plugin update opencode-fusion-conductor</code></pre>
           </div>
 
-          <p>The <code>-f</code>/<code>--force</code> flag is required: without it the CLI prints "Already configured in ..." and leaves the old entry in place (while still caching the new version); with it the entry is replaced in place, never duplicated. Restart OpenCode after. The old version's cache dir (<code>~/.cache/opencode/packages/&lt;pkg&gt;@&lt;old-ver&gt;/</code>) lingers harmlessly - <code>rm -rf</code> it for hygiene.</p>
-
-          <p>An unpinned entry freezes: opencode never re-resolves <code>latest</code> after first install (upstream <a href="https://github.com/anomalyco/opencode/issues/16608" target="_blank" rel="noopener noreferrer">anomalyco/opencode#16608</a> - the <code>&lt;pkg&gt;@latest/</code> cache dir short-circuits resolution). Update it by clearing the cache and restarting (opencode reinstalls latest), or migrate to a pin with the <code>-f</code> command above:</p>
-
-          <div class="command">
-            <div class="command-bar">
-              <span class="command-label">Terminal</span>
-              <button class="copy-btn" type="button" data-copy-target="docs-cmd-update-cache" aria-label="Copy cache clear command">
-                <svg class="copy-btn-check" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></svg>
-                <span class="copy-btn-text">Copy</span>
-              </button>
-            </div>
-            <pre class="command-pre"><code id="docs-cmd-update-cache">rm -rf ~/.cache/opencode/packages/opencode-fusion-conductor@latest</code></pre>
-          </div>
-
-          <p>Removal has no CLI support either: delete the entry from the <code>plugin</code> array in <code>opencode.json</code>, then optionally remove the cache (<code>rm -rf ~/.cache/opencode/packages/opencode-fusion-conductor@*</code>).</p>
+          <p>To remove the plugin: <code>opencode plugin remove opencode-fusion-conductor</code>, then restart.</p>
         </section>
 
         <section id="migration" class="docs-section">
@@ -446,7 +431,7 @@
             </div>
             <div class="docs-faq-item">
               <dt>The plugin loads but nothing changes / no conductor command</dt>
-              <dd>On opencode 1.18.x, when a plugin's git or npm install fails at startup, opencode exits normally and logs nothing (even with <code>--log-level DEBUG --print-logs</code>) - it runs with the stock agents, which looks exactly like "the plugin did nothing". Fingerprint: an empty <code>~/.cache/opencode/packages/&lt;spec&gt;/</code> directory with no <code>node_modules</code> inside. Check that <code>git</code> is on PATH and github.com is reachable, delete the empty directory, and retry the install. The <code>opencode plugin ...</code> CLI command does not swallow this error, so reinstalling via the CLI surfaces it directly.</dd>
+              <dd>If a git or npm install fails, opencode logs the error server-side and runs with the stock agents, which looks exactly like "the plugin did nothing". Check <code>opencode plugin list</code> for the <code>opencode-fusion-conductor</code> id, inspect the server log at <code>~/.local/share/opencode/log/opencode.log</code>, and retry the install - the <code>opencode plugin add ...</code> CLI command surfaces install errors directly.</dd>
             </div>
             <div class="docs-faq-item">
               <dt>Leftover fusion files override the injected agents</dt>

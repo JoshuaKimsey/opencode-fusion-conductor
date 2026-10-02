@@ -117,6 +117,8 @@
              changelog, then run `npm run build:changelog`. -->
         <nav class="docs-toc-nav docs-toc-nav-releases">
           <!-- generated:toc:start -->
+          <a href="#unreleased">Unreleased<span class="docs-toc-date">in progress</span></a>
+          <a href="#v2-0-0">2.0.0<span class="docs-toc-date">Oct 1, 2026</span></a>
           <a href="#v1-0-1">1.0.1<span class="docs-toc-date">Sep 3, 2026</span></a>
           <a href="#v1-0-0">1.0.0<span class="docs-toc-date">Aug 27, 2026</span></a>
           <a href="#fusion-1-2-0">fusion-1.2.0<span class="docs-toc-date">Aug 24, 2026</span></a>
@@ -138,11 +140,48 @@
         </header>
 
         <!-- generated:releases:start -->
+        <section id="unreleased" class="docs-section release">
+          <div class="release-head">
+            <h2 class="release-version">Unreleased</h2>
+            <span class="pill release-tag">In progress</span>
+          </div>
+          <div class="release-group">
+            <h3 class="release-group-label" data-kind="added">Added</h3>
+            <ul class="docs-list release-items">
+              <li><code>file://</code> plugin entries match by the target directory’s <code>package.json</code> name, so local checkouts and the discovery-dir dev shim keep working with the <code>/conductor</code> tools.</li>
+              <li>Setup falls back to the plugin’s own <code>opencode.json</code> entry when no options were passed directly, so discovery-loaded installs still honor a stored profile.</li>
+            </ul>
+            <ul class="docs-list release-items">
+              <li><code>conductor_configure</code> accepts <code>depth</code> (integer 2 or higher, or null to remove) to manage top-level <code>experimental.subagent_depth</code> in the entry file, with backup and atomic write like the rest; status reports the depth and warns on an ignored top-level <code>subagent_depth</code>. Setting <code>depth</code> also moves a stale top-level <code>subagent_depth</code> in the same file into <code>experimental</code> and reports the move.</li>
+              <li>The <code>/conductor</code> template accepts <code>depth=N</code> / <code>depth=none</code> and the setup interview asks about depth.</li>
+            </ul>
+            <ul class="docs-list release-items">
+              <li>Status reports the effective title model: the file top-level <code>small_model</code> wins (core applies it after plugin transforms); otherwise the profile <code>small_model</code>. There is deliberately no <code>models.title</code> override.</li>
+            </ul>
+          </div>
+        </section>
+
+        <section id="v2-0-0" class="docs-section release">
+          <div class="release-head">
+            <h2 class="release-version">2.0.0</h2>
+            <time class="release-date" datetime="2026-10-01">October 1, 2026</time>
+            <span class="pill pill-main release-tag">Latest</span>
+          </div>
+          <div class="release-group">
+            <h3 class="release-group-label" data-kind="changed">Changed</h3>
+            <ul class="docs-list release-items">
+              <li>Ported to OpenCode V2. The V1 plugin-function implementation does not run on V2, so this is a new major: <code>Plugin.define({ id, setup })</code> on <code>@opencode/plugin</code>, with agents registered through <code>ctx.agent.transform</code> upserts, the <code>/conductor</code> command through <code>ctx.command.transform</code>, tools through <code>ctx.tool.transform</code>, and a session <code>context</code> hook that strips edit/write/patch/grep/glob from build/plan model requests on top of the deny rules. V1 permission maps convert to ordered V2 <code>permissions</code> arrays (<code>bash</code> -&gt; <code>shell</code>, <code>task</code> -&gt; <code>subagent</code>); prompts name the V2 tools.</li>
+              <li>Tool results are now <code>{ content }</code> payloads, tool contexts resolve the project directory from the calling session, and the audit hook subscribes via <code>ctx.event.subscribe</code> (opt-in <code>{ audit: true }</code> as before).</li>
+              <li>The <code>/conductor</code> tools read and write both the V1 <code>plugin</code> tuple form and the native V2 <code>plugins</code> object form, preserving whichever the file uses. V2 folds <code>small_model</code> into the built-in <code>title</code> agent (handled) and ignores top-level <code>subagent_depth</code> (set <code>experimental.subagent_depth</code> yourself; the plugin no longer floors it).</li>
+              <li>Install and update docs follow the V2 CLI: <code>opencode plugin add</code>, <code>opencode plugin check</code>, <code>opencode plugin update</code>, <code>opencode plugin remove</code>. 1.x releases stay on opencode 1.18.x.</li>
+            </ul>
+          </div>
+        </section>
+
         <section id="v1-0-1" class="docs-section release">
           <div class="release-head">
             <h2 class="release-version">1.0.1</h2>
             <time class="release-date" datetime="2026-09-03">September 3, 2026</time>
-            <span class="pill pill-main release-tag">Latest</span>
           </div>
           <div class="release-group">
             <h3 class="release-group-label" data-kind="changed">Changed</h3>

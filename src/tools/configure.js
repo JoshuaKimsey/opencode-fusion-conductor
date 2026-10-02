@@ -4,10 +4,11 @@
 // every other config key keeps its value. A rolling backup
 // (opencode.json.conductor-backup) is written before any change, the write is
 // atomic (temp file + rename), the original permission mode is preserved, and
-// the pinned "@version" on the entry is kept exactly as found.
+// the entry keeps its own form: V1 "plugin" tuples stay tuples, V2 "plugins"
+// objects stay objects, and any pinned "@version" on the entry is kept
+// exactly as found.
 
 import fs from "node:fs";
-import { tool } from "@opencode-ai/plugin";
 import { PACKAGE_NAME, KNOWN_ROLES } from "../constants.js";
 import { PROFILES } from "../profiles.js";
 import {
@@ -17,41 +18,55 @@ import {
   copyObject,
   findPluginEntry,
   isPlainObject,
+  nextEntryFor,
   requireConductorCaller,
+  resolveToolDirectory,
 } from "./config-file.js";
 
 const MODEL_PATTERN = /^[^\s/]+\/[^\s/]+$/;
-const OPTION_KEYS = ["profile", "models", "remove", "audit", "claude"];
+const OPTION_KEYS = ["profile", "models", "remove", "audit", "claude", "depth"];
 
-export function configureTool() {
-  return tool({
+export function configureTool(ctx) {
+  return {
+    name: "conductor_configure",
     description:
-      "Configure the Conductor agent team by editing this plugin's own options entry in opencode.json: set the subscription profile, per-role model overrides, and the audit/claude feature flags. Only the conductor plugin entry's options change; everything else in the config is preserved. A backup (opencode.json.conductor-backup) is written before any change, and opencode must be restarted for the change to take effect.",
-    args: {
-      profile: tool.schema
-        .string()
-        .describe("Subscription profile name, e.g. opencode-go or chatgpt. Replaces the stored options.profile.")
-        .optional(),
-      models: tool.schema
-        .record(tool.schema.string(), tool.schema.string())
-        .describe('Per-role model overrides as role -> "provider/model-id", e.g. { sidekick: "openai/gpt-5.6-luna" }. Merges key-wise into the stored options.models.')
-        .optional(),
-      remove: tool.schema
-        .array(tool.schema.string())
-        .describe('Roles whose model overrides should be deleted from the stored options.models, e.g. ["sidekick"].')
-        .optional(),
-      audit: tool.schema
-        .boolean()
-        .describe("Enable (true) or disable (false) the conductor-audit event hook.")
-        .optional(),
-      claude: tool.schema
-        .boolean()
-        .describe("Enable (true) or disable (false) the optional Claude Code review bridge.")
-        .optional(),
+      "Configure the Conductor agent team by editing this plugin's own options entry in opencode.json: set the subscription profile, per-role model overrides, the audit/claude feature flags, and the subagent delegation depth. Only the conductor plugin entry's options change (plus top-level experimental.subagent_depth in the same file when depth is passed); everything else in the config is preserved. A backup (opencode.json.conductor-backup) is written before any change, and opencode must be restarted for the change to take effect.",
+    input: {
+      type: "object",
+      properties: {
+        profile: {
+          type: "string",
+          description: "Subscription profile name, e.g. opencode-go or chatgpt. Replaces the stored options.profile.",
+        },
+        models: {
+          type: "object",
+          description:
+            'Per-role model overrides as role -> "provider/model-id", e.g. { sidekick: "openai/gpt-5.6-luna" }. Merges key-wise into the stored options.models.',
+          additionalProperties: { type: "string" },
+        },
+        remove: {
+          type: "array",
+          items: { type: "string" },
+          description: 'Roles whose model overrides should be deleted from the stored options.models, e.g. ["sidekick"].',
+        },
+        audit: {
+          type: "boolean",
+          description: "Enable (true) or disable (false) the conductor-audit event hook.",
+        },
+        claude: {
+          type: "boolean",
+          description: "Enable (true) or disable (false) the optional Claude Code review bridge.",
+        },
+      },
+        depth: {
+          anyOf: [{ type: "integer", minimum: 2 }, { type: "null" }],
+          description: "Subagent delegation depth: sets top-level experimental.subagent_depth in the same file (integer 2 or higher; the sidekick needs at least 2 to delegate lookups). null removes the setting.",
+        },
+      additionalProperties: false,
     },
     async execute(args, context) {
       requireConductorCaller(context);
-      const directory = context?.directory || process.cwd();
+      const directory = await resolveToolDirectory(ctx, context);
 
       const provided = OPTION_KEYS.filter((key) => args[key] !== undefined);
       if (provided.length === 0) {
@@ -85,6 +100,12 @@ export function configureTool() {
         }
       }
 
+      if (args.depth !== undefined && args.depth !== null) {
+        if (!Number.isInteger(args.depth) || args.depth < 2) {
+          throw new Error('"depth" must be an integer 2 or higher, or null to remove the setting (got ' + JSON.stringify(args.depth) + ')');
+        }
+      }
+
       const found = findPluginEntry(directory);
       if (found.reason === "parse-error") {
         throw new Error(
@@ -99,14 +120,14 @@ export function configureTool() {
       if (found.reason === "jsonc") {
         throw new Error(
           `Found ${found.file}, but .jsonc files cannot be parsed or edited safely by this tool. `
-          + `Edit the file by hand: set the plugin entry to ["${PACKAGE_NAME}", { ... }] and restart opencode.`
+          + `Edit the file by hand: set the plugin entry to {"package": "${PACKAGE_NAME}", "options": { ... }} and restart opencode.`
         );
       }
       if (!found.found) {
         throw new Error(
           `No opencode.json containing the conductor plugin entry was found. Checked: ${found.checked.join(", ")}. `
           + `The conductor plugin may be running from a local plugins/ directory or from another config. `
-          + `Add ["${PACKAGE_NAME}", {}] to the "plugin" array of your opencode.json, then restart opencode.`
+          + `Add {"package": "${PACKAGE_NAME}", "options": {}} to the "plugins" array of your opencode.json (or ["${PACKAGE_NAME}", {}] to the V1 "plugin" array), then restart opencode.`
         );
       }
 
@@ -127,16 +148,42 @@ export function configureTool() {
       if (args.audit !== undefined) next.audit = args.audit;
       if (args.claude !== undefined) next.claude = args.claude;
 
-      const summary = describeChanges(current, next);
-      if (summary.length === 0) {
-        return `No changes needed - the stored conductor options already match. Config file: ${found.file}`;
+      // experimental.subagent_depth lives outside the plugin entry, in the
+      // same file. null removes it; a validated number sets it.
+      const hadExperimental = isPlainObject(found.parsed.experimental);
+      const oldDepth = hadExperimental ? found.parsed.experimental.subagent_depth : undefined;
+      let depthLine = null;
+      let depthMoveLine = null;
+      if (args.depth !== undefined) {
+        if (args.depth === null) {
+          if (hadExperimental) delete found.parsed.experimental.subagent_depth;
+          if (hadExperimental && Object.keys(found.parsed.experimental).length === 0) {
+            delete found.parsed.experimental;
+          }
+          if (oldDepth !== undefined) depthLine = "experimental.subagent_depth: " + valueLabel(oldDepth) + " -> <removed>";
+        } else {
+          if (!isPlainObject(found.parsed.experimental)) found.parsed.experimental = {};
+          found.parsed.experimental.subagent_depth = args.depth;
+          if (Object.hasOwn(found.parsed, "subagent_depth")) {
+            const stale = found.parsed.subagent_depth;
+            delete found.parsed.subagent_depth;
+            depthMoveLine = "subagent_depth: " + JSON.stringify(stale) + " -> <moved to experimental.subagent_depth>";
+          }
+          if (!deepEqual(oldDepth, args.depth)) {
+            depthLine = "experimental.subagent_depth: " + valueLabel(oldDepth) + " -> " + valueLabel(args.depth);
+          }
+        }
       }
 
-      // Preserve the version spec exactly as found and only normalize a bare
-      // string entry to tuple form when there are options to write.
-      const nextEntry =
-        Object.keys(next).length > 0 || Array.isArray(found.raw) ? [found.spec, next] : found.spec;
-      found.parsed.plugin[found.index] = nextEntry;
+      const summary = describeChanges(current, next);
+      if (depthLine) summary.push(depthLine);
+      if (depthMoveLine) summary.push(depthMoveLine);
+      if (summary.length === 0) {
+        return { content: `No changes needed - the stored conductor options already match. Config file: ${found.file}` };
+      }
+
+      // Preserve the entry form and version spec exactly as found.
+      found.parsed[found.key][found.index] = nextEntryFor(found, next);
 
       const serialized = JSON.stringify(found.parsed, null, 2) + "\n";
       const newBytes = Buffer.from(serialized, "utf8");
@@ -145,14 +192,16 @@ export function configureTool() {
       fs.writeFileSync(backup, found.bytes, { mode });
       atomicWrite(found.file, newBytes, mode);
 
-      return [
-        `Updated ${found.file}`,
-        ...summary,
-        `Backup: ${backup}`,
-        "Restart opencode for changes to take effect.",
-      ].join("\n");
+      return {
+        content: [
+          `Updated ${found.file}`,
+          ...summary,
+          `Backup: ${backup}`,
+          "Restart opencode for changes to take effect.",
+        ].join("\n"),
+      };
     },
-  });
+  };
 }
 
 function deepEqual(a, b) {

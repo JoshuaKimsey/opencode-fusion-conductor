@@ -26,3 +26,25 @@ export function resolveRoleModels(profileName, models = {}) {
   }
   return { profile, byRole };
 }
+
+// Parse a "provider/model-id" or "provider/model-id#variant" reference into
+// the V2 Agent.Info model object shape { providerID, id, variant? } used by
+// agent transforms (ctx.agent) and the model default (ctx.model).
+export function parseModelRef(ref) {
+  if (typeof ref !== "string") {
+    throw new Error(`Model reference must be a string, got ${JSON.stringify(ref)}`);
+  }
+  const hash = ref.indexOf("#");
+  const base = hash === -1 ? ref : ref.slice(0, hash);
+  const variant = hash === -1 ? undefined : ref.slice(hash + 1);
+  const slash = base.indexOf("/");
+  if (slash <= 0 || slash === base.length - 1 || base.includes(" ", slash)) {
+    throw new Error(`Model reference must be "provider/model-id" (optional "#variant"), got ${JSON.stringify(ref)}`);
+  }
+  const providerID = base.slice(0, slash);
+  const id = base.slice(slash + 1);
+  if (!providerID || !id || /\s/.test(base)) {
+    throw new Error(`Model reference must be "provider/model-id" (optional "#variant"), got ${JSON.stringify(ref)}`);
+  }
+  return variant ? { providerID, id, variant } : { providerID, id };
+}

@@ -9,7 +9,7 @@ The main agent's file editing is mechanically denied. Its only way to change a f
 
 This is a **rewrite of [opencode-fusion](https://github.com/mihneaptu/opencode-fusion) as a real opencode plugin**: the same mechanically enforced main/sidekick split, but distributed as a one-line npm plugin install instead of a file-based skill bundle. If you are coming from opencode-fusion, see [Migration from opencode-fusion](#migration-from-opencode-fusion).
 
-[Quick start](#quick-start) • [How it works](#how-it-works) • [Configuration](#configuration) • [Enforced vs. advised](#enforced-vs-advised) • [Profiles](#profiles) • [Migration from opencode-fusion](#migration-from-opencode-fusion) • [OpenCode 2 status](#opencode-2-status-and-known-flake) • [Development](#development)
+[Quick start](#quick-start) • [How it works](#how-it-works) • [Configuration](#configuration) • [Enforced vs. advised](#enforced-vs-advised) • [Profiles](#profiles) • [Migration from opencode-fusion](#migration-from-opencode-fusion) • [OpenCode 2 status](#opencode-2-status) • [Development](#development)
 
 > [!NOTE]
 > **Fork and attribution.** This project is forked from
@@ -23,50 +23,50 @@ This is a **rewrite of [opencode-fusion](https://github.com/mihneaptu/opencode-f
 
 ## Quick start
 
-Install with the opencode plugin CLI (recommended):
+Requires OpenCode V2 (`opencode --version` shows 2.x). Install with the
+opencode plugin CLI (recommended):
 
 ```bash
-opencode plugin github:JoshuaKimsey/opencode-fusion-conductor -g
+opencode plugin add opencode-fusion-conductor
 ```
 
-The CLI command writes the plugin entry into your opencode config itself and
-fails with a real error if the install fails. `-g` targets the global config
-(`~/.config/opencode/opencode.json`); drop it to install into a project-local
-`.opencode/opencode.json`.
+The CLI command installs the package and writes the plugin entry into your
+global opencode config itself, failing with a real error if the install
+fails. To try an unreleased revision straight from git:
 
-To pin a specific revision, append a commit SHA to the spec:
-`github:JoshuaKimsey/opencode-fusion-conductor#<commit-sha>`. Do not pin by
-this repo's `v1.x` tags - they are inherited from upstream opencode-fusion and
-point at old releases.
+```bash
+opencode plugin add github:JoshuaKimsey/opencode-fusion-conductor
+```
 
-Manual alternative: add one line to your opencode config yourself
-(`~/.config/opencode/opencode.json`, or a project-level `opencode.json`):
+Do not pin by this repo's `v1.x` tags for V2 (use the npm version pin instead). Still on opencode 1.18.x? Install the V1 line with `opencode plugin add opencode-fusion-conductor@v1` and stay there; 2.x does not run on V1 (those `v1.x` tags are inherited from upstream
+opencode-fusion and point at old releases).
+
+Manual alternative: add one entry to the `plugins` array in your opencode
+config yourself (`~/.config/opencode/opencode.json`, or a project-level
+`opencode.json`):
 
 ```json
 {
-  "plugin": [["opencode-fusion-conductor@1.0.1", { "profile": "opencode-go" }]]
+  "plugins": [{ "package": "opencode-fusion-conductor@2.0.0", "options": { "profile": "opencode-go" } }]
 }
 ```
 
-The `@1.0.1` npm spec form is for after npm publish; the `github:` spec form
-above works before publish.
+Then fully quit and restart opencode (or `opencode service restart`). The
+plugin injects the agent team and the `/conductor` command on the next
+launch; a bare `/conductor` on an unconfigured install runs the first-run
+setup interview in chat.
 
-Then fully quit and restart opencode. opencode auto-installs npm plugins via
-Bun at startup, so there is no skill and no installer. The plugin injects the
-agent team and the `/conductor` command on the next launch; a bare `/conductor`
-on an unconfigured install runs the first-run setup interview in chat.
-
-That is the whole install. **Uninstall** by removing the line and restarting.
+That is the whole install. **Uninstall** with `opencode plugin remove
+opencode-fusion-conductor`, then restart.
 
 > [!IMPORTANT]
-> **If the plugin seems to do nothing:** on opencode 1.18.x, when a plugin's
-> git or npm install fails at startup, opencode exits normally, logs nothing
-> (even with `--log-level DEBUG --print-logs`), and runs with the stock agents
-> - it looks exactly like "the plugin did nothing". The fingerprint is an
-> empty `~/.cache/opencode/packages/<spec>/` directory with no `node_modules`
-> inside. Fix: make sure `git` is on PATH and github.com is reachable, delete
-> the empty directory, and retry. The `opencode plugin ...` CLI command does
-> not swallow this error.
+> **If the plugin seems to do nothing:** check `opencode plugin list` - the
+> plugin id `opencode-fusion-conductor` must show up as active. If a git or
+> npm install fails, opencode logs the error server-side (inspect with
+> `opencode service status` and `~/.local/share/opencode/log/opencode.log`)
+> and runs with the stock agents - which looks exactly like "the plugin did
+> nothing". Installing via the `opencode plugin add ...` CLI command surfaces
+> that error directly instead of swallowing it.
 
 To verify it is working, open a project with some lint errors and ask:
 
@@ -118,9 +118,9 @@ The team below is injected by the plugin at startup. Models are resolved per rol
 | `reviewer` | Critique a plan before implementation; audit a diff before commit | subagent | `opencode-go/glm-5.3-flash` |
 | `vision` | Transcribe images the main model cannot see | subagent (hidden) | unset by default |
 
-`build` and `plan` are the primaries. `build` is the restricted main agent: `edit`, `grep`, `glob`, and `list` are denied, bash is deny-by-default with a verification + git allowlist, and `git commit`/`git push` require user approval. `sidekick` is the executor. `explore` is opencode's built-in read-only agent - the plugin only assigns it a model, never a full definition. `research`, `design`, `reviewer`, and `vision` are optional specialists; a profile (or a `models` override) decides which get a model.
+`build` and `plan` are the primaries. `build` is the restricted main agent: `edit`, `grep`, `glob`, and `list` are denied, shell is deny-by-default with a verification + git allowlist, and `git commit`/`git push` require user approval. `sidekick` is the executor. `explore` is opencode's built-in read-only agent - the plugin only assigns it a model, never a full definition. `research`, `design`, `reviewer`, and `vision` are optional specialists; a profile (or a `models` override) decides which get a model.
 
-`subagent_depth` is floored to 2 so the sidekick can delegate read-only lookups to explore or research.
+Set `experimental.subagent_depth` to at least 2 in your own config if you want the sidekick to keep delegating read-only lookups to explore or research; the plugin no longer floors it for you (V2 exposes no such knob to plugins).
 
 Models move fast. Treat these as 2026 starting points, not requirements. Use any provider you like; in config each model is written as `provider/model-id` (for example `opencode-go/deepseek-v4-flash`), and the sidekick should stay cheaper and faster than the main agent. The mix above spans several vendors on purpose, so the main agent's review of each sidekick diff is cross-vendor.
 
@@ -130,36 +130,37 @@ All plugin options live in the plugin entry of your `opencode.json`:
 
 ```json
 {
-  "plugin": [["opencode-fusion-conductor@1.0.1", { "profile": "opencode-go" }]]
+  "plugins": [{ "package": "opencode-fusion-conductor@2.0.0", "options": { "profile": "opencode-go" } }]
 }
 ```
 
 | Option | Type | Default | Meaning |
 |--------|------|---------|---------|
 | `profile` | string | none | One of `chatgpt`, `github-copilot`, `opencode-go`, `opencode-zen`, `opencode-zen-free`. Fills in per-role models from a subscription profile. |
-| `models` | object | none | Per-role model overrides as `role -> "provider/model-id"`. Roles: `build`, `plan`, `sidekick`, `explore`, `research`, `design`, `reviewer`, `vision`. Overrides win per role over the profile. |
+| `models` | object | none | Per-role model overrides as `role -> "provider/model-id"`. Roles: `build`, `plan`, `sidekick`, `explore`, `research`, `design`, `reviewer`, `vision`; the title agent follows top-level `small_model` instead (core applies it after plugin transforms, so no override can win). Overrides win per role over the profile. |
 | `audit` | boolean | `false` | Enables the `conductor-audit` event hook, which logs the delegation tree and per-agent token usage. |
 | `claude` | boolean | `false` | Enables the Claude Code bridge tools `conductor_claude_status` / `conductor_claude_review`. Requires Claude Pro/Max CLI installed and authenticated. |
+| `depth` | integer or null | none | Sets top-level `experimental.subagent_depth` in the same file (2 or higher; the sidekick needs 2+ to delegate lookups). `null` removes it. Reported by status; does not affect setup state. |
 
 Examples:
 
 ```jsonc
 // Use a subscription profile, then override one role.
 {
-  "plugin": [["opencode-fusion-conductor@1.0.1", {
+  "plugins": [{ "package": "opencode-fusion-conductor@2.0.0", "options": {
     "profile": "opencode-go",
     "models": { "sidekick": "opencode-go/deepseek-v4-flash" },
     "audit": true
-  }]]
+  } }]
 }
 ```
 
 ```jsonc
 // Add the Claude Code plan-review bridge.
 {
-  "plugin": [["opencode-fusion-conductor@1.0.1", {
+  "plugins": [{ "package": "opencode-fusion-conductor@2.0.0", "options": {
     "claude": true
-  }]]
+  } }]
 }
 ```
 
@@ -171,10 +172,10 @@ The plugin injects a `/conductor` command that reports or edits the plugin's own
 - **With arguments** -> applies changes directly, skipping the interview: `conductor_configure` edits the plugin's options in `opencode.json`. Supported forms:
   - role=model pairs: `/conductor sidekick=opencode-go/deepseek-v4-flash explore=opencode-go/deepseek-v4-flash`
   - a profile: `/conductor profile chatgpt`
-  - flags: `/conductor audit=true claude=true`
+  - flags: `/conductor audit=true claude=true depth=2` (depth sets experimental.subagent_depth; `depth=none` removes it)
 
 > [!IMPORTANT]
-> **Model changes require a restart on opencode 1.18.x.** The agent registry is
+> **Model changes require a restart.** The agent registry is
 > materialized at startup, so the plugin's injected agents (and their model
 > assignments) only take effect on the next launch. The `/conductor` command
 > edits the config and always tells you to restart. This is a platform
@@ -182,34 +183,16 @@ The plugin injects a `/conductor` command that reports or edits the plugin's own
 
 ### Updating
 
-The plugin CLI has no update or remove subcommands - the only form is
-`opencode plugin <module> [-g] [-f]`. To update a version-pinned install, run
-the pinned command with `-f`:
+Check for updates and install them with the plugin CLI, then restart
+opencode (or `opencode service restart`):
 
 ```bash
-opencode plugin opencode-fusion-conductor@1.0.2 -g -f
+opencode plugin check
+opencode plugin update opencode-fusion-conductor
 ```
 
-The `-f`/`--force` flag is required: without it the CLI prints "Already
-configured in ..." and leaves the old entry in place (while still caching the
-new version); with it the entry is replaced in place, never duplicated. Restart
-opencode after. The old version's cache dir
-(`~/.cache/opencode/packages/<pkg>@<old-ver>/`) lingers harmlessly - remove it
-with `rm -rf` for hygiene.
-
-An unpinned entry freezes: opencode never re-resolves `latest` after first
-install (upstream [anomalyco/opencode#16608](https://github.com/anomalyco/opencode/issues/16608)
-- the `<pkg>@latest/` cache dir short-circuits resolution). Update it by
-clearing the cache and restarting (opencode reinstalls latest), or migrate to a
-pin with the `-f` command above:
-
-```bash
-rm -rf ~/.cache/opencode/packages/opencode-fusion-conductor@latest
-```
-
-Removal has no CLI support either: delete the entry from the `plugin` array in
-opencode.json, then optionally `rm -rf
-~/.cache/opencode/packages/opencode-fusion-conductor@*`.
+To remove the plugin: `opencode plugin remove opencode-fusion-conductor`,
+then restart.
 
 ## Enforced vs. advised
 
@@ -217,24 +200,24 @@ The pattern's guarantees live in two different layers, and being precise about w
 
 **Enforced: the permission layer.** opencode checks these on every tool call, no matter what the model reads, remembers, or intends:
 
-- The main agent's `edit`, `grep`, `glob`, and `list` are denied. Denied tools are removed from the model's tool schema entirely; there is no edit tool for it to decline to use.
-- Its bash is deny-by-default with a short verification and git allowlist, so file-writing commands are blocked. `git commit` and `git push` additionally require per-command user approval; common direct force/mirror/delete/prune forms are denied by later rules.
+- The main agent's `edit`, `grep`, `glob`, and `list` are denied, and a session hook strips those tools from its model requests as well - there is no edit tool for it to decline to use.
+- Its shell is deny-by-default with a short verification and git allowlist, so file-writing commands are blocked. `git commit` and `git push` additionally require per-command user approval; common direct force/mirror/delete/prune forms are denied by later rules.
 - Direct `git commit` and `git push` invocations plus common Git wrapper forms are denied for the sidekick and design agents, making review-then-commit the normal enforced path.
-- Delegation is bounded by an explicit `task` allowlist: the main agent reaches only its named specialists, and the sidekick can spawn only read-only searchers.
+- Delegation is bounded by an explicit `subagent` allowlist: the main agent reaches only its named specialists, and the sidekick can spawn only read-only searchers.
 - The `conductor_configure` and `conductor_status` tools serve only the build and plan agents; the plugin grants them to those two and denies them everywhere else.
 
 If the main agent "won't delegate," the result is visible inaction: nothing on disk changes. The failure mode is never a silent bypass.
 
-These are the same permission maps the final opencode-fusion release injected, ported verbatim. The guarantee is enforced live against a real opencode binary with plugin-injected agents in `test/integration`.
+These are the same permission rules the final opencode-fusion release injected, converted to the V2 ordered-`permissions` form (`bash` -> `shell`, `task` -> `subagent`). The guarantee is covered by unit tests over the converted rules in `test/`.
 
 **Advised: the prompt layer.** Spec precision, diff-review rigor, cost discipline, parallelization, and skill usage are instructions in the agent prompts. opencode loads skills at the model's discretion (nothing can force an agent to read or apply one), which is exactly why no guarantee here depends on them. If the model slacks at this layer, the cost is quality or wasted tokens, never an unauthorized edit.
 
 **Not guaranteed: the threat model.** The permission layer bounds which tools each agent can call. It is not a sandbox, and it is worth being precise about what it does not protect:
 
-- The `.env` denies on the executors stop the common accidental read (`cat .env` landing a key in a transcript), not a determined one. An agent with broad bash has many equivalent ways to read a file or the process environment, so treat those rules as accidental-leak prevention, not secret isolation. The `{env:VAR}` config syntax keeps keys out of plaintext config and out of the chat; it does not hide them from the environment agents run in.
-- Git command rules match command text and are defense-in-depth, not a shell sandbox: wrappers, alternate executables, or obfuscation can bypass a finite pattern list when an executor has broad bash. They protect against common accidental commits and destructive pushes, not a hostile process. Editing files is the sidekick's job, and catching a wrong edit is what the main agent's diff review (and the optional reviewer) are for.
-- The design agent is the one role granted `skill: allow`, because its prompt cannot do its job without loading a design skill. That skips opencode's per-use approval prompt and overrides a global `skill` deny. A skill is instructions the model then follows, so treat your installed skill set as trusted input on the same footing as your prompts. The agent already holds `edit` and broad bash, so this grants no capability it lacked. Every other agent keeps opencode's default, so a global deny still applies to them.
-- The design agent's path-aware opencode tools are fenced to the workspace (`external_directory: deny`), but processes launched through broad bash are not OS-sandboxed by that rule. The sidekick keeps opencode's default `ask` for paths outside the project. Note that `--auto` mode auto-approves `ask` rules, so use external sandboxing too if an executor must never leave the repo.
+- The `.env` denies on the executors stop the common accidental read (`cat .env` landing a key in a transcript), not a determined one. An agent with broad shell has many equivalent ways to read a file or the process environment, so treat those rules as accidental-leak prevention, not secret isolation. The `{env:VAR}` config syntax keeps keys out of plaintext config and out of the chat; it does not hide them from the environment agents run in.
+- Git command rules match command text and are defense-in-depth, not a shell sandbox: wrappers, alternate executables, or obfuscation can bypass a finite pattern list when an executor has broad shell. They protect against common accidental commits and destructive pushes, not a hostile process. Editing files is the sidekick's job, and catching a wrong edit is what the main agent's diff review (and the optional reviewer) are for.
+- The design agent is the one role granted `skill: allow`, because its prompt cannot do its job without loading a design skill. That skips opencode's per-use approval prompt and overrides a global `skill` deny. A skill is instructions the model then follows, so treat your installed skill set as trusted input on the same footing as your prompts. The agent already holds `edit` and broad shell, so this grants no capability it lacked. Every other agent keeps opencode's default, so a global deny still applies to them.
+- The design agent's path-aware opencode tools are fenced to the workspace (`external_directory: deny`), but processes launched through broad shell are not OS-sandboxed by that rule. The sidekick keeps opencode's default `ask` for paths outside the project. Note that `--auto` mode auto-approves `ask` rules, so use external sandboxing too if an executor must never leave the repo.
 
 **Auditable: verify instead of trusting.** The optional `audit` option enables a hook that logs the delegation tree and aggregates per-agent token usage, and opencode's session DB records every agent's actual tool calls (`opencode db path` prints its location, typically `~/.local/share/opencode/opencode.db`). "Did it really delegate?" is checkable ground truth, not vibes.
 
@@ -264,13 +247,26 @@ The leftover file-based agents are a hazard because they override the plugin-inj
 
 The `claude` and `audit` options fold in what the old `fusion-claude` plugin and `fusion-audit` plugin provided, so there is no separate plugin to install.
 
-## OpenCode 2 status and known flake
+## OpenCode 2 status
 
-This plugin targets **opencode 1.18.x**, the same version opencode-fusion's final release targeted.
+This plugin targets **OpenCode V2** (2.x) since the 2.0.0 port. The V1
+`plugin`-function implementation does not run on V2, so 1.x releases stay on
+opencode 1.18.x.
 
-**OpenCode 2 is not supported.** OpenCode 2 is beta; its plugin API differs from 1.18.x, and its permission enforcement is call-time rather than schema-removal - which means a denied `edit` tool can still be offered and then rejected at call time, breaking the mechanical guarantee this plugin relies on (that denied tools are absent from the agent's tool schema). A v2 port is planned but not shipped.
+Port notes worth knowing:
 
-**Known upstream flake.** On rare first delegation, a config-hook/agent-registry race in opencode ([anomalyco/opencode#30955](https://github.com/anomalyco/opencode/issues/30955)) can surface; a retry of the delegation resolves it.
+- Agent injection moved from the V1 config hook to `ctx.agent.transform`
+  upserts (`update` creates agents that do not exist yet), with V1 permission
+  maps converted to ordered V2 `permissions` arrays (`bash` -> `shell`,
+  `task` -> `subagent`). Prompts name the V2 tools.
+- The mechanical no-edit guarantee is two layers: `deny` rules plus a session
+  `context` hook that removes `edit`/`write`/`patch`/`grep`/`glob` from
+  build/plan model requests.
+- Top-level `subagent_depth` is ignored by V2; the `depth` option manages `experimental.subagent_depth` instead
+  `small_model` folds into the built-in `title` agent, handled automatically.
+  Status reports the depth and warns when a stale top-level value is present.
+- The `/conductor` tools read and write both the V1 `plugin` tuple form and
+  the native V2 `plugins` object form, preserving whichever the file uses.
 
 ## Development
 
@@ -283,7 +279,23 @@ npm run check-profiles   # verify profile model ids against models.dev (needs ne
 npm run build:changelog  # regenerate site/changelog.html from CHANGELOG.md
 ```
 
-`test/integration` needs a real opencode 1.18.x binary on `PATH`. See [docs/testing.md](docs/testing.md) for details.
+`test/integration` holds the opt-in live suite (gated behind
+`CONDUCTOR_INTEGRATION=1`); it still drives the V1 `opencode` binary and the
+V1 plugin shape, so it stays skipped on V2 - `npm test` never runs it. See
+[docs/testing.md](docs/testing.md) for details. Live V2 verification is a
+local plugin install plus the `/api/agent`, `/api/command` checks described
+in [OpenCode 2 status](#opencode-2-status).
+
+### Local development install
+
+Config-file local path entries are not picked up by opencode 2.0.x, so
+develop against the global discovery directory instead: drop a shim file
+at `~/.config/opencode/plugins/conductor.js` containing one re-export line
+(`export { default } from "file:///path/to/opencode-conductor/src/index.js";`)
+and keep a `file://` entry with your options in the global `plugins` array
+(the tools match it by the target directory's `package.json` name, and
+setup reads its options when none were passed directly). Restart opencode
+(`opencode service restart`) after code changes; config edits hot-reload.
 
 ## Files
 

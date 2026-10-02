@@ -1,83 +1,148 @@
-// Config injection for the Conductor plugin. Mutates the passed config in
-// place (opencode's plugin config hook hands over the config object to modify
-// at startup) and returns it for convenience.
+// Conductor registration for OpenCode V2.
 //
-// Per-role model resolution order: options.models[role] overrides the
-// profile's agents map. Unknown profiles throw with the available names.
+// V2 plugins cannot mutate a global config object. Instead setup() registers
+// transforms on the domains that own each surface:
+//   agents  -> ctx.agent.transform (upsert the seven team roles; update()
+//              creates agents that do not exist yet, so the custom sidekick,
+//              research, design, reviewer, and vision roles are registered the
+//              same way the builtins build/plan are overridden)
+//   explore -> model-only update, preserving the built-in definition
+//   title   -> small_model from the profile becomes agents.title.model
+//   default model -> ctx.model.transform default.set(providerID, modelID)
+//   command -> ctx.command.transform (/conductor)
+//   tools   -> ctx.tool.transform (conductor_configure/status, +claude bridge)
+//   guard   -> ctx.session.hook("context") strips edit/write/patch/grep/glob
+//              from build/plan model requests, restoring the V1 schema-removal
+//              feel on top of the deny rules
+//   audit   -> ctx.event.subscribe, opt-in via { audit: true }
+//
+// resolveAgentDefinitions() is pure and unit-tested: options.models[role]
+// overrides the profile's agents map per role, unknown profiles throw with
+// the available names.
 
 import { AGENTS } from "./agents.js";
 import { COMMANDS } from "./commands.js";
-import { resolveRoleModels } from "./resolve.js";
+import { resolveRoleModels, parseModelRef } from "./resolve.js";
+import { toPermissions } from "./permissions.js";
+import { conductorToolDefs } from "./tools/index.js";
+import { claudeTools } from "./claude.js";
+import { guardContextHook } from "./guard.js";
+import { registerAudit } from "./audit.js";
+import { findPluginEntry, isPlainObject, copyObject } from "./tools/config-file.js";
 
-const ROLES = ["build", "plan", "sidekick", "research", "design", "reviewer", "vision"];
+export const ROLES = ["build", "plan", "sidekick", "research", "design", "reviewer", "vision"];
 
-/**
- * Build a copy of an agent's permission map with the conductor_configure and
- * conductor_status custom-tool keys inserted before the bash key (or appended
- * when there is no bash key). Placement stays at permission.tool level - never
- * inside the bash or task maps - and after any wildcard entries so the specific
- * tool permissions win under opencode's last-match-wins resolution. The source
- * permission maps have no top-level "*" key, so the insertion point before
- * `bash` keeps the conductor keys with the other scalar tool permissions.
- */
-function withConductorToolPermissions(permission, value) {
-  const out = {};
-  let inserted = false;
-  for (const [key, val] of Object.entries(permission)) {
-    if (!inserted && key === "bash") {
-      out.conductor_configure = value;
-      out.conductor_status = value;
-      inserted = true;
-    }
-    out[key] = val;
+// Resolve the plugin options for this instance.
+//
+// Explicit ctx.options win (the normal case: an npm/Git package entry with an
+// options object). When the plugin loads without configured options - notably
+// through `.opencode/plugins/` or `~/.config/opencode/plugins/` discovery,
+// which carries no options - fall back to the plugin's own opencode.json
+// entry (both the V1 "plugin" tuple form and the V2 "plugins" object form),
+// so a discovery-loaded install still honors a stored profile. Anything else
+// (no entry anywhere) means unconfigured.
+export function resolvePluginOptions(ctx) {
+  const explicit = ctx?.options && typeof ctx.options === "object" ? ctx.options : {};
+  if (Object.keys(explicit).length > 0) return { ...explicit };
+  const directory =
+    typeof ctx?.location?.directory === "string" && ctx.location.directory
+      ? ctx.location.directory
+      : process.cwd();
+  const found = findPluginEntry(directory);
+  if (found.found && isPlainObject(found.options)) return copyObject(found.options);
+  return {};
+}
+
+export function resolveAgentDefinitions(options = {}) {
+  const opts = { ...options };
+  const { profile, byRole } = resolveRoleModels(opts.profile, opts.models ?? {});
+
+  const defs = {};
+  for (const role of ROLES) {
+    const src = AGENTS[role];
+    const def = {
+      description: src.description,
+      mode: src.mode,
+      system: src.system,
+      permissions: toPermissions(src.permission, role === "build" || role === "plan" ? "allow" : "deny"),
+    };
+    if (src.hidden) def.hidden = true;
+    if (byRole[role]) def.model = parseModelRef(byRole[role]);
+    defs[role] = def;
   }
-  if (!inserted) {
-    out.conductor_configure = value;
-    out.conductor_status = value;
-  }
+
+  const out = { defs, profile };
+  if (byRole.explore) out.exploreModel = parseModelRef(byRole.explore);
+  if (byRole.build) out.defaultModel = parseModelRef(byRole.build);
+  if (profile?.small_model) out.titleModel = parseModelRef(profile.small_model);
   return out;
 }
 
-export function applyConductor(config, options = {}) {
+function applyAgentDef(agent, def) {
+  agent.description = def.description;
+  agent.mode = def.mode;
+  agent.system = def.system;
+  agent.permissions = def.permissions;
+  if (def.hidden !== undefined) agent.hidden = def.hidden;
+  if (def.model !== undefined) agent.model = def.model;
+  return agent;
+}
+
+export async function registerConductor(ctx, options = {}) {
   const opts = { ...options };
-  // Per-role resolution is shared with the conductor_status tool (see
-  // resolve.js): an options.models override wins per role, otherwise the
-  // profile's agents map supplies it. Unknown profiles throw with the
-  // available names, exactly as before.
-  const { profile, byRole } = resolveRoleModels(opts.profile, opts.models ?? {});
+  const { defs, exploreModel, defaultModel, titleModel } = resolveAgentDefinitions(opts);
 
-  config.agent = config.agent ?? {};
+  await ctx.agent.transform((editor) => {
+    for (const role of ROLES) {
+      const def = defs[role];
+      editor.update(role, (agent) => applyAgentDef(agent, def));
+    }
+    // explore is built-in: never replace its definition, only assign a model
+    // when one resolved for it.
+    if (exploreModel) {
+      const existing = editor.get("explore");
+      if (existing) editor.update("explore", (agent) => { agent.model = exploreModel; });
+    }
+    // V2 folds small_model into the built-in title agent.
+    if (titleModel) {
+      editor.update("title", (agent) => { agent.model = titleModel; });
+    }
+  });
 
-  for (const role of ROLES) {
-    const agent = { ...AGENTS[role] };
-    agent.permission = withConductorToolPermissions(
-      agent.permission,
-      role === "build" || role === "plan" ? "allow" : "deny"
-    );
-    const resolvedModel = byRole[role];
-    if (resolvedModel) agent.model = resolvedModel;
-    config.agent[role] = agent;
+  // The default session model follows the build (main) model, as config.model
+  // did on V1.
+  if (defaultModel) {
+    await ctx.model.transform((editor) => {
+      editor.default.set(defaultModel.providerID, defaultModel.id);
+    });
   }
 
-  // explore is built-in: never inject a full definition, only a model when one
-  // resolved for it (preserving any existing explore entry).
-  const exploreModel = byRole.explore;
-  if (exploreModel) {
-    config.agent.explore = { ...(config.agent.explore ?? {}), model: exploreModel };
-  }
+  await ctx.command.transform((editor) => {
+    editor.add({
+      name: "conductor",
+      description: COMMANDS.conductor.description,
+      execute: async (invocation) => {
+        const args = invocation.prompt?.text?.trim() ?? "";
+        const text = COMMANDS.conductor.template.replaceAll("$ARGUMENTS", args);
+        await ctx.session.prompt({
+          ...invocation.prompt,
+          sessionID: invocation.sessionID,
+          text,
+          delivery: invocation.delivery,
+        });
+      },
+    });
+  });
 
-  const buildModel = byRole.build;
-  if (buildModel) {
-    config.model = buildModel;
-  }
-  if (profile && profile.small_model) {
-    config.small_model = profile.small_model;
-  }
+  await ctx.tool.transform((editor) => {
+    for (const def of conductorToolDefs(ctx, opts)) editor.add(def);
+    if (opts.claude) {
+      for (const def of Object.values(claudeTools())) editor.add(def);
+    }
+  });
 
-  config.subagent_depth = Math.max(2, config.subagent_depth ?? 0);
+  await ctx.session.hook("context", guardContextHook);
 
-  config.command = config.command ?? {};
-  config.command.conductor = COMMANDS.conductor;
-
-  return config;
+  // Optional audit subscription. Its cleanup aborts the event loop.
+  return registerAudit(ctx, opts);
 }

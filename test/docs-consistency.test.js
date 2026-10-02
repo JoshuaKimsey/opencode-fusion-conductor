@@ -82,10 +82,10 @@ describe('docs consistency', () => {
     );
   });
 
-  test('README documents the version-pinned force-update command', () => {
+  test('README documents the V2 plugin update command', () => {
     assert.ok(
-      readme.includes('opencode plugin opencode-fusion-conductor@1.0.2 -g -f'),
-      'README must carry the version-pinned force-update command "opencode plugin opencode-fusion-conductor@1.0.2 -g -f"'
+      readme.includes('opencode plugin update opencode-fusion-conductor'),
+      'README must carry the V2 update command "opencode plugin update opencode-fusion-conductor"'
     );
   });
 

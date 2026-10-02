@@ -11,9 +11,10 @@ const root = path.join(__dirname, '..');
 
 let ENTRY;
 
-let conductorTools;
+let conductorToolDefs;
 let configureTool;
 let statusTool;
+let resolvePluginOptions;
 let PROFILES;
 
 before(async () => {
@@ -25,7 +26,8 @@ before(async () => {
     load('profiles.js'),
     load('constants.js'),
   ]);
-  conductorTools = toolsIndex.conductorTools;
+  conductorToolDefs = toolsIndex.conductorToolDefs;
+  ({ resolvePluginOptions } = await import(pathToFileURL(path.join(root, 'src', 'config.js')).href));
   configureTool = configure.configureTool;
   statusTool = status.statusTool;
   PROFILES = profiles.PROFILES;
@@ -90,52 +92,68 @@ function projectWithEntry(dir, { options = {}, version, bare = false } = {}) {
   return file;
 }
 
-const configure = (args, context) =>
-  configureTool().execute(args, { directory: context?.directory ?? makeProject(), agent: context?.agent ?? 'build' });
+const configure = async (args, context) =>
+  (
+    await configureTool(undefined).execute(args, {
+      directory: context?.directory ?? makeProject(),
+      agent: context?.agent ?? 'build',
+    })
+  ).content;
 
-const status = (context) =>
-  statusTool().execute({}, { directory: context?.directory ?? makeProject(), agent: context?.agent ?? 'build' });
+const status = async (context) =>
+  (
+    await statusTool(undefined).execute(
+      {},
+      { directory: context?.directory ?? makeProject(), agent: context?.agent ?? 'build' }
+    )
+  ).content;
 
 describe('conductor_configure and conductor_status tool surface', () => {
-  test('conductorTools returns exactly the two conductor tools', () => {
-    assert.deepEqual(Object.keys(conductorTools({})).sort(), ['conductor_configure', 'conductor_status']);
-    assert.deepEqual(Object.keys(conductorTools({ claude: true })).sort(), [
-      'conductor_configure',
-      'conductor_status',
-    ]);
+  test('conductorToolDefs returns exactly the two conductor tool definitions', () => {
+    for (const opts of [{}, { claude: true }]) {
+      const defs = conductorToolDefs(undefined, opts);
+      assert.deepEqual(defs.map((d) => d.name).sort(), ['conductor_configure', 'conductor_status']);
+      for (const def of defs) {
+        assert.equal(typeof def.description, 'string');
+        assert.equal(typeof def.input, 'object');
+        assert.equal(def.input.type, 'object');
+        assert.equal(typeof def.execute, 'function');
+      }
+    }
   });
 
   test('caller gate refuses every non-build/plan agent and allows build/plan', async () => {
-    const tools = conductorTools();
+    const defs = conductorToolDefs(undefined, {});
+    const byName = Object.fromEntries(defs.map((d) => [d.name, d]));
     const directory = makeProject();
     for (const agent of ['sidekick', 'research', 'design', 'reviewer', 'vision', 'explore', undefined]) {
       await assert.rejects(
-        tools.conductor_configure.execute({ profile: 'chatgpt' }, { directory, agent }),
+        byName.conductor_configure.execute({ profile: 'chatgpt' }, { directory, agent }),
         /only serve the build and plan agents/i
       );
       await assert.rejects(
-        tools.conductor_status.execute({}, { directory, agent }),
+        byName.conductor_status.execute({}, { directory, agent }),
         /only serve the build and plan agents/i
       );
     }
     // build/plan pass the gate: configure proceeds to entry discovery (which
     // errors because no config exists here) and status produces a report.
     await assert.rejects(
-      tools.conductor_configure.execute({ profile: 'chatgpt' }, { directory, agent: 'build' }),
+      byName.conductor_configure.execute({ profile: 'chatgpt' }, { directory, agent: 'build' }),
       /No opencode\.json containing the conductor plugin entry/i
     );
     await assert.rejects(
-      tools.conductor_configure.execute({ profile: 'chatgpt' }, { directory, agent: 'plan' }),
+      byName.conductor_configure.execute({ profile: 'chatgpt' }, { directory, agent: 'plan' }),
       /No opencode\.json containing the conductor plugin entry/i
     );
-    const report = await tools.conductor_status.execute({}, { directory, agent: 'build' });
-    assert.match(report, /Conductor status/);
-    assert.match(await tools.conductor_status.execute({}, { directory, agent: 'plan' }), /Conductor status/);
+    const report = await byName.conductor_status.execute({}, { directory, agent: 'build' });
+    assert.match(report.content, /Conductor status/);
+    assert.match((await byName.conductor_status.execute({}, { directory, agent: 'plan' })).content, /Conductor status/);
   });
 
   test('requires at least one of the five options', async () => {
     const file = projectWithEntry(makeProject());
-    await assert.rejects(configure({}, { directory: path.dirname(file) }), /at least one of: profile, models, remove, audit, claude/);
+    await assert.rejects(configure({}, { directory: path.dirname(file) }), /at least one of: profile, models, remove, audit, claude, depth/);
   });
 });
 
@@ -225,6 +243,83 @@ describe('conductor_configure entry discovery', () => {
     const project = readJson(path.join(projectDir, 'opencode.json'));
     assert.equal(project.plugin[0], 'some-other-plugin', 'the foreign plugin entry must stay untouched');
     assert.equal(project.theme, 'dark');
+  });
+});
+
+describe('conductor_configure V2 plugins entries', () => {
+  function projectWithPluginsEntry(dir, entry) {
+    const file = path.join(dir, 'opencode.json');
+    writeJson(file, { plugins: [entry] });
+    return file;
+  }
+
+  test('matches the V2 string and object entry forms and preserves the package spec', async () => {
+    const forms = [
+      { entry: ENTRY, check: (config) => assert.equal(config.plugins[0].package, ENTRY) },
+      {
+        entry: `${ENTRY}@1.2.3`,
+        check: (config) => assert.equal(config.plugins[0].package, `${ENTRY}@1.2.3`),
+      },
+      {
+        entry: { package: ENTRY, options: { profile: 'chatgpt' } },
+        check: (config) => assert.equal(config.plugins[0].package, ENTRY),
+      },
+      {
+        entry: { package: `${ENTRY}@1.2.3`, options: { profile: 'chatgpt' } },
+        check: (config) => assert.equal(config.plugins[0].package, `${ENTRY}@1.2.3`),
+      },
+    ];
+    for (const { entry, check } of forms) {
+      const projectDir = makeProject();
+      const file = projectWithPluginsEntry(projectDir, entry);
+      const out = await configure({ audit: true }, { directory: projectDir });
+      assert.ok(out.includes('audit'), 'report must show the audit change');
+      const config = readJson(file);
+      check(config);
+      assert.equal(config.plugins[0].options.audit, true);
+    }
+  });
+
+  test('a bare V2 string normalizes to a package object only when options are written', async () => {
+    const projectDir = makeProject();
+    const file = projectWithPluginsEntry(projectDir, `${ENTRY}@2.0.0`);
+    await configure({ profile: 'chatgpt' }, { directory: projectDir });
+    assert.deepEqual(readJson(file).plugins, [{ package: `${ENTRY}@2.0.0`, options: { profile: 'chatgpt' } }]);
+  });
+
+  test('a V2 object entry keeps its form and any extra keys', async () => {
+    const projectDir = makeProject();
+    const file = projectWithPluginsEntry(projectDir, { package: ENTRY, options: { profile: 'opencode-go' } });
+    await configure({ models: { sidekick: 'custom/fast' } }, { directory: projectDir });
+    assert.deepEqual(readJson(file).plugins, [
+      { package: ENTRY, options: { profile: 'opencode-go', models: { sidekick: 'custom/fast' } } },
+    ]);
+  });
+
+  test('a V1 tuple entry in a plugins-keyed file is left for the V1 key only', async () => {
+    // A tuple under "plugins" is not a V2 form: it must not match, so the
+    // run falls through to the missing-entry error instead of editing it.
+    const projectDir = makeProject();
+    projectWithPluginsEntry(projectDir, [ENTRY, { profile: 'chatgpt' }]);
+    await assert.rejects(
+      configure({ audit: true }, { directory: projectDir }),
+      /No opencode\.json containing the conductor plugin entry/
+    );
+  });
+
+  test('status reports the V2 config key holding the entry', async () => {
+    const projectDir = makeProject();
+    projectWithPluginsEntry(projectDir, { package: ENTRY, options: { profile: 'chatgpt' } });
+    const out = await status({ directory: projectDir });
+    assert.ok(out.includes('Config key: plugins'));
+    assert.match(out, /Stored options: \{"profile":"chatgpt"\}/);
+  });
+
+  test('status reports the V1 config key for tuple entries', async () => {
+    const projectDir = makeProject();
+    projectWithEntry(projectDir, { options: { profile: 'chatgpt' } });
+    const out = await status({ directory: projectDir });
+    assert.ok(out.includes('Config key: plugin'));
   });
 });
 
@@ -626,5 +721,208 @@ describe('conductor_status report', () => {
     const out = await status({ directory: projectDir });
     assert.match(out, /JSONC - cannot be parsed by this tool/);
     assert.match(out, /edit the \.jsonc by hand/i);
+  });
+});
+
+describe('file:// plugin entries', () => {
+  function projectWithFileEntry(dir, targetDir, { options = {}, key = 'plugins' } = {}) {
+    fs.writeFileSync(
+      path.join(targetDir, 'package.json'),
+      JSON.stringify({ name: ENTRY, version: '0.0.0' })
+    );
+    const spec = 'file://' + targetDir;
+    const file = path.join(dir, 'opencode.json');
+    writeJson(file, key === 'plugins' ? { plugins: [{ package: spec, options }] } : { plugin: [[spec, options]] });
+    return { file, spec };
+  }
+
+  test('a file:// entry matches by the target package.json name', async () => {
+    const projectDir = makeProject();
+    const targetDir = makeProject();
+    const { spec } = projectWithFileEntry(projectDir, targetDir, { options: { profile: 'chatgpt' } });
+    const out = await status({ directory: projectDir });
+    assert.ok(out.includes('Setup state: configured (profile: chatgpt, no model overrides)'));
+    assert.ok(out.includes('Plugin entry: ' + spec + ' (no version pin)'));
+    assert.ok(out.includes('Config key: plugins'));
+  });
+
+  test('configure edits a file:// entry in place, preserving the spec', async () => {
+    const projectDir = makeProject();
+    const targetDir = makeProject();
+    const { file, spec } = projectWithFileEntry(projectDir, targetDir, { options: { profile: 'chatgpt' } });
+    await configure({ audit: true }, { directory: projectDir });
+    assert.deepEqual(readJson(file).plugins, [{ package: spec, options: { profile: 'chatgpt', audit: true } }]);
+  });
+
+  test('a file:// entry pointing at another package never matches', async () => {
+    const projectDir = makeProject();
+    const targetDir = makeProject();
+    fs.writeFileSync(path.join(targetDir, 'package.json'), JSON.stringify({ name: 'some-other-plugin' }));
+    const file = path.join(projectDir, 'opencode.json');
+    writeJson(file, { plugins: [{ package: 'file://' + targetDir, options: {} }] });
+    await assert.rejects(
+      configure({ audit: true }, { directory: projectDir }),
+      /No opencode\.json containing the conductor plugin entry/
+    );
+    const out = await status({ directory: projectDir });
+    assert.match(out, /Config file: not found/);
+  });
+
+  test('a file:// entry with a missing target never matches', async () => {
+    const projectDir = makeProject();
+    const file = path.join(projectDir, 'opencode.json');
+    writeJson(file, { plugin: [['file://' + projectDir + '/nope', {}]] });
+    await assert.rejects(
+      configure({ audit: true }, { directory: projectDir }),
+      /No opencode\.json containing the conductor plugin entry/
+    );
+  });
+});
+
+describe('resolvePluginOptions', () => {
+  test('explicit ctx.options win without touching the filesystem', () => {
+    const out = resolvePluginOptions({ options: { profile: 'chatgpt' }, location: { directory: '/nonexistent-dir-xyz' } });
+    assert.deepEqual(out, { profile: 'chatgpt' });
+  });
+
+  test('empty options fall back to the config entry', () => {
+    const projectDir = makeProject();
+    projectWithEntry(projectDir, { options: { profile: 'opencode-go' } });
+    const out = resolvePluginOptions({ options: {}, location: { directory: projectDir } });
+    assert.deepEqual(out, { profile: 'opencode-go' });
+  });
+
+  test('empty everywhere means unconfigured', () => {
+    const out = resolvePluginOptions({ options: {}, location: { directory: makeProject() } });
+    assert.deepEqual(out, {});
+  });
+});
+
+describe('conductor_configure subagent depth', () => {
+  test('depth sets experimental.subagent_depth in the entry file', async () => {
+    const projectDir = makeProject();
+    const file = projectWithEntry(projectDir);
+    const out = await configure({ depth: 3 }, { directory: projectDir });
+    assert.match(out, /experimental\.subagent_depth: \(not set\) -> 3/);
+    assert.equal(readJson(file).experimental.subagent_depth, 3);
+    assert.deepEqual(readJson(file).plugin, [[ENTRY, {}]], 'the plugin entry itself stays untouched');
+  });
+
+  test('depth preserves other experimental keys and the entry form', async () => {
+    const projectDir = makeProject();
+    const file = path.join(projectDir, 'opencode.json');
+    writeJson(file, {
+      experimental: { subagent_depth: 2, other_flag: true },
+      plugins: [{ package: ENTRY, options: { profile: 'chatgpt' } }],
+    });
+    const out = await configure({ depth: 4 }, { directory: projectDir });
+    assert.match(out, /experimental\.subagent_depth: 2 -> 4/);
+    const config = readJson(file);
+    assert.equal(config.experimental.subagent_depth, 4);
+    assert.equal(config.experimental.other_flag, true);
+    assert.deepEqual(config.plugins, [{ package: ENTRY, options: { profile: 'chatgpt' } }]);
+  });
+
+  test('depth below 2 or non-integer is refused and leaves the file byte-identical', async () => {
+    const projectDir = makeProject();
+    const file = projectWithEntry(projectDir);
+    const original = fs.readFileSync(file, 'utf8');
+    for (const bad of [0, 1, -2, 2.5, '3', true]) {
+      await assert.rejects(
+        configure({ depth: bad }, { directory: projectDir }),
+        /"depth" must be an integer 2 or higher/
+      );
+    }
+    assert.equal(fs.readFileSync(file, 'utf8'), original);
+    assert.ok(!fs.existsSync(file + '.conductor-backup'));
+  });
+
+  test('depth null removes the setting and prunes an emptied experimental object', async () => {
+    const projectDir = makeProject();
+    const file = path.join(projectDir, 'opencode.json');
+    writeJson(file, { experimental: { subagent_depth: 2 }, plugin: [[ENTRY, {}]] });
+    const out = await configure({ depth: null }, { directory: projectDir });
+    assert.match(out, /experimental\.subagent_depth: 2 -> <removed>/);
+    const config = readJson(file);
+    assert.ok(!('experimental' in config), 'an emptied experimental object is pruned');
+  });
+
+  test('depth null with nothing set is a no-op', async () => {
+    const projectDir = makeProject();
+    const file = projectWithEntry(projectDir);
+    const original = fs.readFileSync(file, 'utf8');
+    const out = await configure({ depth: null }, { directory: projectDir });
+    assert.match(out, /No changes needed/);
+    assert.equal(fs.readFileSync(file, 'utf8'), original);
+  });
+
+  test('status reports the depth and warns on ignored top-level subagent_depth', async () => {
+    const projectDir = makeProject();
+    const file = path.join(projectDir, 'opencode.json');
+    writeJson(file, {
+      subagent_depth: 2,
+      experimental: { subagent_depth: 3 },
+      plugin: [[ENTRY, {}]],
+    });
+    const out = await status({ directory: projectDir });
+    assert.match(out, /Subagent depth: top-level subagent_depth is set but ignored by V2/);
+    assert.ok(out.includes('experimental.subagent_depth=3 in ' + file));
+  });
+
+  test('status reports an unset depth as the OpenCode default', async () => {
+    const projectDir = makeProject();
+    projectWithEntry(projectDir);
+    const out = await status({ directory: projectDir });
+    assert.match(out, /experimental\.subagent_depth unset \(OpenCode default\)/);
+  });
+});
+
+describe('conductor_configure depth migration', () => {
+  test('setting depth moves a stale top-level subagent_depth into experimental', async () => {
+    const projectDir = makeProject();
+    const file = path.join(projectDir, 'opencode.json');
+    writeJson(file, { subagent_depth: 5, plugin: [[ENTRY, {}]] });
+    const out = await configure({ depth: 2 }, { directory: projectDir });
+    assert.ok(out.includes('subagent_depth: 5 -> <moved to experimental.subagent_depth>'));
+    assert.ok(out.includes('experimental.subagent_depth: (not set) -> 2'));
+    const config = readJson(file);
+    assert.ok(!('subagent_depth' in config));
+    assert.equal(config.experimental.subagent_depth, 2);
+  });
+
+  test('no move line when no stale top-level value exists', async () => {
+    const projectDir = makeProject();
+    const file = projectWithEntry(projectDir);
+    const out = await configure({ depth: 2 }, { directory: projectDir });
+    assert.ok(!out.includes('<moved to experimental.subagent_depth>'));
+    assert.ok(!('subagent_depth' in readJson(file)));
+  });
+});
+
+
+
+describe("title agent model reporting", () => {
+  test("status reports the file small_model first", async () => {
+    const projectDir = makeProject();
+    const file = path.join(projectDir, "opencode.json");
+    writeJson(file, { small_model: "custom/titles", plugin: [[ENTRY, { profile: "chatgpt" }]] });
+    const out = await status({ directory: projectDir });
+    assert.ok(out.includes("  title: custom/titles (from top-level small_model)"));
+  });
+
+  test("status falls back to the profile small_model", async () => {
+    const projectDir = makeProject();
+    projectWithEntry(projectDir, { options: { profile: "chatgpt" } });
+    const out = await status({ directory: projectDir });
+    assert.ok(out.includes("  title: openai/gpt-5.6-luna (from profile small_model)"));
+  });
+
+  test("title is not an overridable role", async () => {
+    const projectDir = makeProject();
+    projectWithEntry(projectDir);
+    await assert.rejects(
+      configure({ models: { title: "custom/titles" } }, { directory: projectDir }),
+      /Unknown role "title" in models/
+    );
   });
 });

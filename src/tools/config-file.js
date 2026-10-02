@@ -1,5 +1,5 @@
 // Shared config-file plumbing for the conductor_configure and conductor_status
-// tools: locating the opencode.json whose "plugin" array holds this plugin's
+// tools: locating the opencode.json whose plugin array holds this plugin's
 // entry, safely copying/merging the options object, and the atomic
 // write-with-backup helpers (ported from the legacy fusion-setup installer).
 //
@@ -9,6 +9,11 @@
 // XDG_CONFIG_HOME is unset or empty, matching opencode's own "||" fallback).
 // A .jsonc counterpart is never parsed - JSONC cannot be round-tripped
 // safely, so callers get a clear refusal instead.
+//
+// Both plugin keys are supported: the V1 "plugin" array (bare specs and
+// [spec, options] tuples) and the native V2 "plugins" array (bare specs and
+// { package, options } objects). The key that holds the entry is reported as
+// `key` so writers preserve the file's own form.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -69,40 +74,85 @@ export function stripVersionSpec(spec) {
   return spec.slice(0, at);
 }
 
-function findEntryInConfig(parsed) {
-  if (!isPlainObject(parsed)) return undefined;
-  const plugin = parsed.plugin;
-  if (!Array.isArray(plugin)) return undefined;
-  for (let index = 0; index < plugin.length; index++) {
-    const raw = plugin[index];
-    let spec;
-    let options;
-    if (typeof raw === "string") {
-      spec = raw;
-    } else if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string") {
-      spec = raw[0];
-      if (isPlainObject(raw[1])) options = raw[1];
-    } else {
-      continue;
+// Normalize one array element to { spec, options, raw } or undefined when it
+// is not an object/string entry we understand. `key` selects the V1 tuple
+// form ("plugin") or the V2 object form ("plugins").
+function normalizeEntry(raw, key) {
+  if (typeof raw === "string") {
+    return { spec: raw, options: undefined, raw };
+  }
+  if (key === "plugin" && Array.isArray(raw) && raw.length > 0 && typeof raw[0] === "string") {
+    return { spec: raw[0], options: isPlainObject(raw[1]) ? raw[1] : undefined, raw };
+  }
+  if (key === "plugins" && isPlainObject(raw) && typeof raw.package === "string") {
+    return { spec: raw.package, options: isPlainObject(raw.options) ? raw.options : undefined, raw };
+  }
+  return undefined;
+}
+
+// Build the replacement array element preserving the file's own form:
+// V1 strings normalize to tuples only when there are options to write;
+// V2 strings normalize to { package, options } objects under the same rule,
+// and V2 objects keep every key they already carry.
+export function nextEntryFor(entry, next) {
+  const hasOptions = Object.keys(next).length > 0;
+  if (entry.key === "plugins") {
+    if (typeof entry.raw === "string") {
+      return hasOptions ? { package: entry.spec, options: next } : entry.spec;
     }
-    const stripped = stripVersionSpec(spec);
-    if (stripped === PACKAGE_NAME) {
-      const version = stripped === spec ? undefined : spec.slice(stripped.length + 1);
-      return { index, spec, version, options, raw };
+    const out = { ...entry.raw, package: entry.spec };
+    if (hasOptions) out.options = next;
+    else delete out.options;
+    return out;
+  }
+  if (Array.isArray(entry.raw)) return [entry.spec, next];
+  return hasOptions ? [entry.spec, next] : entry.spec;
+}
+
+// A file:// entry carries no package name of its own: identify it by the
+// name field of the package.json in the directory it points at (leniently
+// accepting a file path by falling back to its parent directory). Anything
+// unreadable simply does not match.
+function localPackageName(spec) {
+  if (!spec.startsWith("file://")) return undefined;
+  try {
+    const target = spec.slice("file://".length);
+    const st = fs.statSync(target);
+    const dir = st.isDirectory() ? target : path.dirname(target);
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
+    return typeof pkg.name === "string" ? pkg.name : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function findEntryInConfig(parsed, key) {
+  if (!isPlainObject(parsed)) return undefined;
+  const list = parsed[key];
+  if (!Array.isArray(list)) return undefined;
+  for (let index = 0; index < list.length; index++) {
+    const normalized = normalizeEntry(list[index], key);
+    if (!normalized) continue;
+    const stripped = stripVersionSpec(normalized.spec);
+    const matched = stripped === PACKAGE_NAME || localPackageName(normalized.spec) === PACKAGE_NAME;
+    if (matched) {
+      const version = stripped === normalized.spec ? undefined : normalized.spec.slice(stripped.length + 1);
+      return { key, index, spec: normalized.spec, version, options: normalized.options, raw: normalized.raw };
     }
   }
   return undefined;
 }
 
-// Locate the opencode.json whose "plugin" array holds this plugin's entry.
+// Locate the opencode.json whose plugin array holds this plugin's entry.
 // Result shapes:
-//   { found: true, file, bytes, parsed, checked, index, spec, version, options, raw }
+//   { found: true, key, file, bytes, parsed, checked, index, spec, version, options, raw }
 //   { found: false, reason: "missing", checked }
 //   { found: false, reason: "jsonc", file, checked }
 //   { found: false, reason: "parse-error" | "unreadable", file, error, checked }
 // The first existing config that fails to parse (or the first .jsonc-only
 // location) stops the search: writing to a later config while an earlier one
-// is broken or hand-editable would be wrong.
+// is broken or hand-editable would be wrong. "plugin" (V1) is checked before
+// "plugins" (V2) within each file.
 export function findPluginEntry(directory) {
   const checked = [];
   const candidates = [
@@ -124,7 +174,7 @@ export function findPluginEntry(directory) {
       } catch (error) {
         return { found: false, reason: "parse-error", file, error, checked };
       }
-      const entry = findEntryInConfig(parsed);
+      const entry = findEntryInConfig(parsed, "plugin") ?? findEntryInConfig(parsed, "plugins");
       if (entry) return { found: true, file, bytes, parsed, checked, ...entry };
       continue;
     }
@@ -138,6 +188,31 @@ export function findPluginEntry(directory) {
 
 export function backupPathFor(file) {
   return path.join(path.dirname(file), "opencode.json.conductor-backup");
+}
+
+// Resolve the project directory a tool call runs for (OpenCode V2).
+//
+// V2 tool contexts carry no working directory - only { sessionID, agent,
+// signal }. Prefer an explicit directory override when one is present (unit
+// tests and callers that already know the project), then the calling
+// session's location directory, then the plugin instance's location, and
+// finally the process working directory.
+export async function resolveToolDirectory(ctx, toolCtx) {
+  if (typeof toolCtx?.directory === "string" && toolCtx.directory) return toolCtx.directory;
+  const sessionID = toolCtx?.sessionID;
+  if (sessionID && ctx?.session?.get) {
+    try {
+      const res = await ctx.session.get({ sessionID });
+      const dir = res?.data?.location?.directory ?? res?.location?.directory;
+      if (typeof dir === "string" && dir) return dir;
+    } catch {
+      /* fall through to the location fallbacks */
+    }
+  }
+  if (typeof ctx?.location?.directory === "string" && ctx.location.directory) {
+    return ctx.location.directory;
+  }
+  return process.cwd();
 }
 
 // Atomic replace on POSIX: write a sibling temp file (same directory, so the
