@@ -8,6 +8,46 @@ versions).
 
 This project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `file://` plugin entries match by the target directory's `package.json`
+  name, so local checkouts and the discovery-dir dev shim keep working with
+  the `/conductor` tools.
+- Setup falls back to the plugin's own `opencode.json` entry when no options
+  were passed directly, so discovery-loaded installs still honor a stored
+  profile.
+
+- `conductor_configure` accepts `depth` (integer 2 or higher, or null to remove) to manage top-level `experimental.subagent_depth` in the entry file, with backup and atomic write like the rest; status reports the depth and warns on an ignored top-level `subagent_depth`. Setting `depth` also moves a stale top-level `subagent_depth` in the same file into `experimental` and reports the move.
+- The `/conductor` template accepts `depth=N` / `depth=none` and the setup interview asks about depth.
+
+- Status reports the effective title model: the file top-level `small_model` wins (core applies it after plugin transforms); otherwise the profile `small_model`. There is deliberately no `models.title` override.
+
+## 2.0.0 - 2026-10-01
+
+### Changed
+
+- Ported to OpenCode V2. The V1 plugin-function implementation does not run
+  on V2, so this is a new major: `Plugin.define({ id, setup })` on
+  `@opencode/plugin`, with agents registered through `ctx.agent.transform`
+  upserts, the `/conductor` command through `ctx.command.transform`, tools
+  through `ctx.tool.transform`, and a session `context` hook that strips
+  edit/write/patch/grep/glob from build/plan model requests on top of the
+  deny rules. V1 permission maps convert to ordered V2 `permissions` arrays
+  (`bash` -> `shell`, `task` -> `subagent`); prompts name the V2 tools.
+- Tool results are now `{ content }` payloads, tool contexts resolve the
+  project directory from the calling session, and the audit hook subscribes
+  via `ctx.event.subscribe` (opt-in `{ audit: true }` as before).
+- The `/conductor` tools read and write both the V1 `plugin` tuple form and
+  the native V2 `plugins` object form, preserving whichever the file uses.
+  V2 folds `small_model` into the built-in `title` agent (handled) and
+  ignores top-level `subagent_depth` (set `experimental.subagent_depth`
+  yourself; the plugin no longer floors it).
+- Install and update docs follow the V2 CLI: `opencode plugin add`,
+  `opencode plugin check`, `opencode plugin update`, `opencode plugin
+  remove`. 1.x releases stay on opencode 1.18.x.
+
 ## 1.0.1 - 2026-09-03
 
 ### Changed

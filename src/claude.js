@@ -1,9 +1,8 @@
 // Optional first-party Claude Pro/Max reviewer for Conductor.
 // Ported from the fusion-claude plugin (a guarded bridge that invokes the
-// official Claude Code CLI for plan review). Converts the plugin's exported
-// factory (server(input, options) => { tool }) into a tool-factory function
-// `claudeTools(options)` that src/index.js wires only when the user opts in
-// via { claude: true }.
+// official Claude Code CLI for plan review). claudeTools(options) returns V2
+// tool definitions registered by setup only when the user opts in via
+// { claude: true }.
 //
 // This bridge uses the official Claude Code CLI and its own first-party login.
 // Authentication stays inside Claude Code; the plugin never opens its
@@ -11,7 +10,6 @@
 
 import { spawn } from "node:child_process";
 import os from "node:os";
-import { tool } from "@opencode-ai/plugin";
 
 const DEFAULT_MODEL = "claude-opus-5";
 const DEFAULT_EFFORT = "high";
@@ -266,9 +264,13 @@ function requireConductorCaller(context) {
 }
 
 function requireNotCanceled(context) {
-  if (context?.abort?.aborted) {
+  if (context?.signal?.aborted || context?.abort?.aborted) {
     throw new Error("The Claude review was canceled before it started");
   }
+}
+
+function cancelSignal(context) {
+  return context?.signal ?? context?.abort;
 }
 
 function resolveModelChoice(model, effort) {
@@ -346,29 +348,54 @@ export function claudeTools(options = {}) {
   const reviewMs = timeouts?.reviewMs ?? REVIEW_TIMEOUT_MS;
 
   return {
-    conductor_claude_status: tool({
+    conductor_claude_status: {
+      name: "conductor_claude_status",
       description: "Check whether the optional first-party Claude Pro/Max review bridge is ready. Returns no account identity or credential data.",
-      args: {},
+      input: {
+        type: "object",
+        properties: {},
+        additionalProperties: false,
+      },
       async execute(_args, context) {
         requireConductorCaller(context);
         requireNotCanceled(context);
-        const subscription = await requireFirstPartySubscription(run, safeEnvironment, context?.abort, authMs);
-        return `Claude Code bridge ready: ${subscription.toUpperCase()} subscription, ${DEFAULT_MODEL}, effort ${DEFAULT_EFFORT}.`;
+        const signal = cancelSignal(context);
+        const subscription = await requireFirstPartySubscription(run, safeEnvironment, signal, authMs);
+        return { content: `Claude Code bridge ready: ${subscription.toUpperCase()} subscription, ${DEFAULT_MODEL}, effort ${DEFAULT_EFFORT}.` };
       },
-    }),
+    },
 
-    conductor_claude_review: tool({
+    conductor_claude_review: {
+      name: "conductor_claude_review",
       description: "Ask Claude Code for a stateless, read-only critique of a self-contained implementation plan or diff. Claude cannot inspect files or make changes.",
-      args: {
-        packet: tool.schema.string().max(INPUT_LIMIT).describe("The task, relevant context, proposed plan or diff, risks, and verification steps to review."),
-        model: tool.schema.string().max(64).describe(`Optional full Claude model id (default ${DEFAULT_MODEL}), for example claude-opus-4-8 or claude-sonnet-5.`).optional(),
-        effort: tool.schema.string().max(16).describe(`Optional reasoning effort: low, medium, high, xhigh, or max (default ${DEFAULT_EFFORT}).`).optional(),
+      input: {
+        type: "object",
+        properties: {
+          packet: {
+            type: "string",
+            maxLength: INPUT_LIMIT,
+            description: "The task, relevant context, proposed plan or diff, risks, and verification steps to review.",
+          },
+          model: {
+            type: "string",
+            maxLength: 64,
+            description: `Optional full Claude model id (default ${DEFAULT_MODEL}), for example claude-opus-4-8 or claude-sonnet-5.`,
+          },
+          effort: {
+            type: "string",
+            maxLength: 16,
+            description: `Optional reasoning effort: low, medium, high, xhigh, or max (default ${DEFAULT_EFFORT}).`,
+          },
+        },
+        required: ["packet"],
+        additionalProperties: false,
       },
       async execute({ packet, model, effort }, context) {
         requireConductorCaller(context);
         requireNotCanceled(context);
+        const signal = cancelSignal(context);
         const choice = resolveModelChoice(model, effort);
-        await requireFirstPartySubscription(run, safeEnvironment, context?.abort, authMs);
+        await requireFirstPartySubscription(run, safeEnvironment, signal, authMs);
         const result = await run({
           args: reviewArgs(choice.model, choice.effort),
           input: packet,
@@ -379,7 +406,7 @@ export function claudeTools(options = {}) {
           env: safeEnvironment,
           timeoutMs: reviewMs,
           maxOutputBytes: OUTPUT_LIMIT,
-          signal: context?.abort,
+          signal,
         });
         if (result.code !== 0) {
           const detail = firstStderrLine(result.stderr);
@@ -402,8 +429,8 @@ export function claudeTools(options = {}) {
         if (!usedModels.some((used) => used === choice.model || datedVariant.test(used))) {
           throw new Error(`Claude Code did not report using the pinned ${choice.model} model`);
         }
-        return `Claude plan review (${choice.model}, effort ${choice.effort}):\n${review}`;
+        return { content: `Claude plan review (${choice.model}, effort ${choice.effort}):\n${review}` };
       },
-    }),
+    },
   };
 }

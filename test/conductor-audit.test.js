@@ -5,33 +5,58 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
-// Ported from test/plugin.test.js (the fusion-audit plugin smoke test). The
-// source plugin returned { event, 'tool.execute.after' }; the conductor plugin
-// wires auditHook's return value as the single "event" hook, so tool-execution
-// logging now rides the event stream (message.part.updated with completed tool
-// parts) instead of the tool.execute.after trigger hook. Behavioral
-// expectations are unchanged.
-describe('conductor-audit event hook (ported from fusion-audit)', () => {
+// The V2 audit module exposes a pure event handler (auditHook) plus a
+// subscription wiring helper (registerAudit). Tool-execution logging rides the
+// event stream (message.part.updated with completed tool parts). Behavioral
+// expectations are unchanged from the V1 event hook.
+describe('conductor-audit event hook', () => {
   let auditHook;
+  let registerAudit;
   let logged;
   let hook;
 
   before(async () => {
-    ({ auditHook } = await import(pathToFileURL(path.join(__dirname, '..', 'src', 'audit.js')).href));
+    ({ auditHook, registerAudit } = await import(
+      pathToFileURL(path.join(__dirname, '..', 'src', 'audit.js')).href
+    ));
 
     logged = [];
-    const input = { client: { app: { log: (entry) => { logged.push(entry.body); } } } };
-    hook = auditHook(input, { audit: true });
+    hook = auditHook({ audit: true }, (message, extra) => { logged.push({ message, extra }); });
   });
 
   test('returns undefined when audit is off and an event hook function when on', () => {
-    const input = { client: { app: { log: () => {} } } };
-    assert.equal(auditHook(input, {}), undefined, 'audit must be opt-in');
-    assert.equal(auditHook(input, { audit: false }), undefined, 'audit false must stay inert');
+    assert.equal(auditHook({}, () => {}), undefined, 'audit must be opt-in');
+    assert.equal(auditHook({ audit: false }, () => {}), undefined, 'audit false must stay inert');
     assert.equal(typeof hook, 'function', 'audit on must return the event hook function');
-    // The contract holds even when the plugin input (and thus the client) is
-    // missing: the hook still exists but degrades to a no-op.
-    assert.equal(typeof auditHook(undefined, { audit: true }), 'function');
+    // The contract holds even without a log sink: the hook still exists.
+    assert.equal(typeof auditHook({ audit: true }), 'function');
+  });
+
+  test('registerAudit returns undefined when audit is off', async () => {
+    const seen = [];
+    const ctx = { event: { subscribe: () => (async function* () {})() } };
+    assert.equal(await registerAudit(ctx, {}, (m, e) => seen.push([m, e])), undefined);
+    assert.equal(seen.length, 0);
+  });
+
+  test('registerAudit subscribes and returns a cleanup function when on', async () => {
+    const events = [
+      { type: 'session.created', properties: { info: { id: 'ses_child', parentID: 'ses_root' } } },
+    ];
+    const seen = [];
+    const ctx = {
+      event: {
+        subscribe: () => (async function* () {
+          yield events[0];
+        })(),
+      },
+    };
+    const cleanup = await registerAudit(ctx, { audit: true }, (m, e) => seen.push([m, e]));
+    assert.equal(typeof cleanup, 'function');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0][0], 'subagent session spawned');
+    cleanup();
   });
 
   test('logs child session spawns and ignores root sessions', async () => {
@@ -48,17 +73,29 @@ describe('conductor-audit event hook (ported from fusion-audit)', () => {
     await hook({ event: { type: 'message.updated', properties: {} } });
 
     assert.equal(logged.length, 1, 'only the child session spawn should be logged');
-    assert.equal(logged[0].service, 'conductor-audit');
     assert.equal(logged[0].message, 'subagent session spawned');
     assert.equal(logged[0].extra.parentID, 'ses_root');
   });
 
-  test('logs edit/write/apply_patch/task tool executions and ignores read-only tools', async () => {
+  test('accepts the V2 data envelope as well as properties', async () => {
     logged.length = 0;
-    // "apply_patch" is opencode's third mutation tool gated by the edit
-    // permission. Tool executions reach the event hook as completed tool parts;
-    // a tool part still running or in error is not a finished execution.
-    for (const tool of ['edit', 'write', 'apply_patch', 'task', 'read', 'grep', 'bash']) {
+    await hook({
+      event: {
+        type: 'session.created',
+        data: { info: { id: 'ses_child2', parentID: 'ses_root' } },
+      },
+    });
+    assert.equal(logged.length, 1);
+    assert.equal(logged[0].extra.sessionID, 'ses_child2');
+  });
+
+  test('logs edit/write/apply_patch/subagent tool executions and ignores read-only tools', async () => {
+    logged.length = 0;
+    // "apply_patch" is the third mutation tool gated by the edit permission.
+    // Tool executions reach the event hook as completed tool parts; a tool
+    // part still running or in error is not a finished execution. V2 renamed
+    // the delegation tool from "task" to "subagent"; both spellings log.
+    for (const tool of ['edit', 'write', 'apply_patch', 'task', 'subagent', 'read', 'grep', 'shell']) {
       await hook({
         event: {
           type: 'message.part.updated',
@@ -68,7 +105,7 @@ describe('conductor-audit event hook (ported from fusion-audit)', () => {
     }
     assert.deepEqual(
       logged.map((entry) => entry.extra.tool),
-      ['edit', 'write', 'apply_patch', 'task'],
+      ['edit', 'write', 'apply_patch', 'task', 'subagent'],
       'only file-mutating and delegation tools belong in the audit trail'
     );
   });
@@ -103,8 +140,6 @@ describe('conductor-audit event hook (ported from fusion-audit)', () => {
     await hook({ event: { type: 'session.idle', properties: { sessionID: 'ses_usage' } } });
 
     assert.deepEqual(logged, [{
-      service: 'conductor-audit',
-      level: 'info',
       message: 'session token usage',
       extra: {
         sessionID: 'ses_usage',

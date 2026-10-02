@@ -1,13 +1,12 @@
 // conductor_status: read-only health/config report for the Conductor setup.
 // Never writes anything. Reports where the plugin entry lives and its raw
 // options, the effective role -> model resolution (same logic as the startup
-// config hook, via resolveRoleModels), migration hazards from a previous
+// registration, via resolveRoleModels), migration hazards from a previous
 // fusion install, and the pinned plugin version. Every filesystem read is
 // tolerant: missing files and directories are reported as absent, never thrown.
 
 import fs from "node:fs";
 import path from "node:path";
-import { tool } from "@opencode-ai/plugin";
 import { PACKAGE_NAME, KNOWN_ROLES } from "../constants.js";
 import { resolveRoleModels } from "../resolve.js";
 import { PROFILES } from "../profiles.js";
@@ -17,6 +16,7 @@ import {
   findPluginEntry,
   isPlainObject,
   requireConductorCaller,
+  resolveToolDirectory,
 } from "./config-file.js";
 
 // Leftover file-based agents from the old fusion install override the
@@ -32,17 +32,22 @@ const LEFT_OVER_AGENT_ROLES = [
 ];
 const LEFT_OVER_PLUGINS = ["fusion-audit.js", "fusion-claude.js"];
 
-export function statusTool() {
-  return tool({
+export function statusTool(ctx) {
+  return {
+    name: "conductor_status",
     description:
       "Read-only status report for the Conductor setup: which opencode.json holds the plugin entry and its options, the effective role -> model resolution, leftover fusion-install hazards, and the pinned plugin version. Never modifies any file.",
-    args: {},
+    input: {
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    },
     async execute(_args, context) {
       requireConductorCaller(context);
-      const directory = context?.directory || process.cwd();
-      return statusReport(directory);
+      const directory = await resolveToolDirectory(ctx, context);
+      return { content: statusReport(directory) };
     },
-  });
+  };
 }
 
 function statusReport(directory) {
@@ -65,6 +70,7 @@ function statusReport(directory) {
 
   if (found.found) {
     lines.push(`Config file: ${found.file}`);
+    lines.push(`Config key: ${found.key}`);
     lines.push(
       `Plugin entry: ${found.spec}${found.version ? ` (version pin: ${found.version})` : " (no version pin)"}`
     );
@@ -82,19 +88,24 @@ function statusReport(directory) {
     lines.push(`Config file: not found (checked ${found.checked.join(", ")})`);
   }
 
-  // (b) Effective role -> model resolution, identical to applyConductor.
+  // (b) Effective role -> model resolution, identical to the registration.
   const models = isPlainObject(storedOptions.models) ? storedOptions.models : {};
   let byRole;
+  let storedProfile;
   try {
+    storedProfile = resolveRoleModels(storedOptions.profile, models).profile;
     byRole = resolveRoleModels(storedOptions.profile, models).byRole;
   } catch (error) {
     lines.push(`  WARN: ${error.message}`);
     byRole = resolveRoleModels(undefined, models).byRole;
   }
+  lines.push(depthReport(found));
   lines.push("Effective role models:");
   for (const role of KNOWN_ROLES) {
     lines.push(`  ${role}: ${byRole[role] ?? "unset"}`);
   }
+
+  lines.push(titleReport(found, storedProfile));
 
   // (c) Migration hazards from a previous fusion install.
   lines.push("Migration hazards:");
@@ -142,6 +153,36 @@ function statusReport(directory) {
   }
 
   return lines.join("\n");
+}
+
+// Title-agent model for the status report. Core applies the FILE top-level
+// small_model to the title agent after plugin transforms, so a file value is
+// what actually takes effect; otherwise the profile small_model applies.
+function titleReport(found, profile) {
+  const fileSmall = found.found && isPlainObject(found.parsed) && typeof found.parsed.small_model === "string"
+    ? found.parsed.small_model
+    : undefined;
+  const effective = fileSmall !== undefined ? fileSmall : profile && profile.small_model;
+  if (!effective) return "  title: unset";
+  return "  title: " + effective + " (from " + (fileSmall !== undefined ? "top-level small_model" : "profile small_model") + ")";
+}
+
+// Subagent depth for the status report. V2 honors only
+// experimental.subagent_depth; a top-level subagent_depth is ignored with a
+// warning, so its presence is reported as a hazard, not a setting.
+function depthReport(found) {
+  if (!found.found) return "Subagent depth: unknown (no plugin entry found)";
+  const bits = [];
+  if (found.parsed && Object.hasOwn(found.parsed, "subagent_depth")) {
+    bits.push("top-level subagent_depth is set but ignored by V2 - move it to experimental.subagent_depth");
+  }
+  const experimental = isPlainObject(found.parsed.experimental) ? found.parsed.experimental : {};
+  if (experimental.subagent_depth === undefined) {
+    bits.push("experimental.subagent_depth unset (OpenCode default)");
+  } else {
+    bits.push("experimental.subagent_depth=" + JSON.stringify(experimental.subagent_depth) + " in " + found.file);
+  }
+  return "Subagent depth: " + bits.join("; ");
 }
 
 // Setup state drives the /conductor command's branching: unconfigured (no

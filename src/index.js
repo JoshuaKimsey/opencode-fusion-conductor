@@ -1,19 +1,17 @@
-// Plugin entry point. opencode treats EVERY export of this module as a plugin,
-// so Conductor must be the only export. The loader calls it as
-// Conductor(input, options) where options is the tuple options from
-// config "plugin": [["opencode-fusion-conductor@1.0.0", { ...options }]].
+// Plugin entry point (OpenCode V2).
+//
+// A V2 plugin default-exports a definition with a stable id; setup()
+// registers agent/command/tool transforms, session hooks, and event
+// subscriptions through the plugin context. Plugin options come from
+// ctx.options: { profile, models, audit, claude } as documented in README.md.
 
-import { applyConductor } from "./config.js";
-import { conductorTools } from "./tools/index.js";
-import { auditHook } from "./audit.js";
-import { claudeTools } from "./claude.js";
+import { Plugin } from "@opencode/plugin";
+import { registerConductor, resolvePluginOptions } from "./config.js";
 
-export const Conductor = async (input, options) => {
-  const opts = options ?? {};
-  const event = auditHook(input, opts);
-  return {
-    config: async (cfg) => applyConductor(cfg, opts),
-    tool: { ...conductorTools(opts), ...(opts.claude ? claudeTools(opts) : {}) },
-    ...(event ? { event } : {}),
-  };
-};
+export default Plugin.define({
+  id: "opencode-fusion-conductor",
+  async setup(ctx) {
+    const opts = resolvePluginOptions(ctx);
+    return registerConductor(ctx, opts);
+  },
+});

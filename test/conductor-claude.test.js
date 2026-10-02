@@ -10,13 +10,30 @@ const { pathToFileURL } = require('node:url');
 const root = path.join(__dirname, '..');
 
 let claudeTools;
-let Conductor;
+let registerConductor;
 before(async () => {
   const load = (name) => import(pathToFileURL(path.join(root, 'src', name)).href);
-  const [claude, index] = await Promise.all([load('claude.js'), load('index.js')]);
+  const [claude, config] = await Promise.all([load('claude.js'), load('config.js')]);
   claudeTools = claude.claudeTools;
-  Conductor = index.Conductor;
+  registerConductor = config.registerConductor;
 });
+
+function fakeCtx() {
+  const seen = { tools: [] };
+  return {
+    seen,
+    ctx: {
+      options: {},
+      location: { directory: '/test' },
+      agent: { transform: async () => {} },
+      model: { transform: async () => {} },
+      command: { transform: async () => {} },
+      tool: { transform: async (cb) => { cb({ add: (def) => seen.tools.push(def) }); } },
+      session: { hook: async () => {} },
+      event: { subscribe: () => (async function* () {})() },
+    },
+  };
+}
 
 describe('Conductor Claude Code bridge (claudeTools factory)', () => {
   // claudeTools(options) is a tool-factory function: tests inject the process
@@ -70,24 +87,32 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
     assert.deepEqual(Object.keys(tools).sort(), ['conductor_claude_review', 'conductor_claude_status']);
   });
 
-  test('index.js wires the conductor tools and the claude tools only when opts.claude is true', async () => {
-    const withClaude = await Conductor(undefined, { claude: true });
-    assert.deepEqual(Object.keys(withClaude.tool).sort(), [
+  test('registration wires the conductor tools and the claude tools only when opts.claude is true', async () => {
+    const withClaude = fakeCtx();
+    await registerConductor(withClaude.ctx, { claude: true });
+    assert.deepEqual(withClaude.seen.tools.map((t) => t.name).sort(), [
       'conductor_claude_review',
       'conductor_claude_status',
       'conductor_configure',
       'conductor_status',
     ]);
 
-    const withoutClaude = await Conductor(undefined, {});
-    assert.deepEqual(Object.keys(withoutClaude.tool).sort(), ['conductor_configure', 'conductor_status']);
+    const withoutClaude = fakeCtx();
+    await registerConductor(withoutClaude.ctx, {});
+    assert.deepEqual(withoutClaude.seen.tools.map((t) => t.name).sort(), ['conductor_configure', 'conductor_status']);
+  });
+
+  test('the plugin entrypoint exports a V2 definition with a stable id', async () => {
+    const index = await import(pathToFileURL(path.join(root, 'src', 'index.js')).href);
+    assert.equal(index.default.id, 'opencode-fusion-conductor');
+    assert.equal(typeof index.default.setup, 'function');
   });
 
   test('status verifies first-party Pro/Max auth without returning identity data', async () => {
     const tools = toolsWith({ run: async () => authResult() });
     const output = await tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' });
-    assert.match(output, /bridge ready.*PRO.*claude-opus-5/i);
-    assert.doesNotMatch(output, /must-not-leak|@example\.com/i);
+    assert.match(output.content, /bridge ready.*PRO.*claude-opus-5/i);
+    assert.doesNotMatch(output.content, /must-not-leak|@example\.com/i);
   });
 
   test('review pins safe CLI flags as pairs, sends the packet over stdin, and removes API routing', async () => {
@@ -104,7 +129,7 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
     const packet = 'Task and proposed plan';
     const output = await tools.conductor_claude_review.execute({ packet }, { worktree: 'C:/workspace', agent: 'plan' });
 
-    assert.match(output, /PLAN_REVISE\nAdd a rollback test\./);
+    assert.match(output.content, /PLAN_REVISE\nAdd a rollback test\./);
     assert.equal(calls.length, 2);
     assert.deepEqual(calls[0].args, ['auth', 'status', '--json']);
     assert.equal(calls[1].input, packet);
@@ -161,7 +186,7 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
     );
     assert.equal(flagValue(calls[1].args, '--model'), 'claude-opus-4-8');
     assert.equal(flagValue(calls[1].args, '--effort'), 'max');
-    assert.match(output, /claude-opus-4-8.*effort max/i);
+    assert.match(output.content, /claude-opus-4-8.*effort max/i);
   });
 
   test('rejects unsafe model or effort choices before any claude invocation', async () => {
@@ -212,7 +237,7 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
     const { calls, run } = recordingRun([authResult(), reviewResult()]);
     const abort = new AbortController();
     const tools = toolsWith({ run });
-    await tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'plan', abort: abort.signal });
+    await tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'plan', signal: abort.signal });
     assert.equal(calls[0].signal, abort.signal);
     assert.equal(calls[1].signal, abort.signal);
   });
@@ -223,7 +248,7 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
     abort.abort();
     const tools = toolsWith({ run });
     await assert.rejects(
-      tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
+      tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build', signal: abort.signal }),
       /canceled/i
     );
     assert.equal(calls.length, 0);
@@ -357,7 +382,7 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
       { packet: 'plan' },
       { directory: 'C:/workspace', agent: 'build' }
     );
-    assert.match(output, /PLAN_APPROVED/);
+    assert.match(output.content, /PLAN_APPROVED/);
   });
 
   test('stderr redaction strips key-shaped tokens and applies to review errors too', async () => {
@@ -490,7 +515,7 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
       const abort = new AbortController();
       const tools = toolsWith({ environment });
       const pending = assert.rejects(
-        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build', signal: abort.signal }),
         /canceled/i
       );
       const pid = await readPidWhenReady(pidfile);
@@ -527,7 +552,7 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
       const abort = new AbortController();
       const tools = toolsWith({ environment });
       const pending = assert.rejects(
-        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
+        tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build', signal: abort.signal }),
         /canceled/i
       );
       const childPid = await readPidWhenReady(path.join(bin, 'tree-child.pid'));
@@ -575,7 +600,7 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
       const abort = new AbortController();
       const tools = toolsWith({ environment });
       const pending = assert.rejects(
-        tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build', abort: abort.signal }),
+        tools.conductor_claude_review.execute({ packet: 'plan' }, { directory: 'C:/workspace', agent: 'build', signal: abort.signal }),
         /canceled/i
       );
       const pid = await readPidWhenReady(pidfile);
@@ -600,7 +625,7 @@ describe('Conductor Claude Code bridge (claudeTools factory)', () => {
   test('a Max subscription is reported as ready', async () => {
     const tools = toolsWith({ run: async () => authResult({ subscriptionType: 'max' }) });
     const output = await tools.conductor_claude_status.execute({}, { directory: 'C:/workspace', agent: 'build' });
-    assert.match(output, /MAX/);
+    assert.match(output.content, /MAX/);
   });
 
   test('output beyond the byte limit kills the real child process with a clear error', async () => {
